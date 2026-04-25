@@ -8,6 +8,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
 import { miaRainOffer } from "./src/demo/miaOffer";
 import { demoWidgetSpecs } from "./src/demo/widgetSpecs";
+import { demoSignals } from "./src/surfacing/demoSignals";
+import { scoreSurfacing } from "./src/surfacing/surfacingScore";
 
 type DemoStep = "silent" | "surface" | "redeem" | "success";
 type WidgetVariant = keyof typeof demoWidgetSpecs;
@@ -15,6 +17,14 @@ type WidgetVariant = keyof typeof demoWidgetSpecs;
 export default function App() {
   const [step, setStep] = useState<DemoStep>("silent");
   const [widgetVariant, setWidgetVariant] = useState<WidgetVariant>("rainHero");
+  const [highIntent, setHighIntent] = useState(false);
+  const surfacing = scoreSurfacing({
+    weatherTrigger: demoSignals.weather.trigger,
+    eventEndingSoon: demoSignals.event.endingSoon,
+    demandGapRatio: demoSignals.merchant.demandGapRatio,
+    distanceM: demoSignals.merchant.distanceM,
+    highIntent,
+  });
 
   return (
     <SafeAreaView className="flex-1 bg-cream">
@@ -49,7 +59,7 @@ export default function App() {
           ) : (
             <>
               <Text className="mt-3 text-3xl font-black leading-9 text-ink">
-                {miaRainOffer.headline}
+                {surfacing.headline}
               </Text>
               <Text className="mt-4 text-base leading-6 text-neutral-600">
                 {miaRainOffer.discount} · {miaRainOffer.distanceM} m away · expires {miaRainOffer.expiresAt}
@@ -58,19 +68,33 @@ export default function App() {
           )}
 
           <View className="mt-6 gap-3">
-            {miaRainOffer.whySignals.map((signal) => (
-              <Signal key={signal.label} label={signal.label} value={signal.value} />
-            ))}
+            <Signal label="Weather" value={demoSignals.weather.summary} />
+            <Signal label="Event" value={demoSignals.event.summary} />
+            <Signal label="Demand" value={demoSignals.merchant.summary} />
             <Signal
               label="Privacy"
-              value={`{${miaRainOffer.privacyEnvelope.intent_token}, ${miaRainOffer.privacyEnvelope.h3_cell_r8}}`}
+              value={`{${demoSignals.privacy.intent_token}, ${demoSignals.privacy.h3_cell_r8}}`}
             />
+            <Signal label="Surfacing" value={`${surfacing.score} / ${surfacing.threshold}`} />
+            <Signal label="Reasons" value={surfacing.reasons.join(" · ")} />
           </View>
 
+          <Pressable
+            className={`mt-4 rounded-2xl px-5 py-3 ${highIntent ? "bg-spark" : "bg-rain"}`}
+            onPress={() => setHighIntent((value) => !value)}
+          >
+            <Text className="text-center text-sm font-black text-white">
+              High-intent surfacing: {highIntent ? "ON" : "OFF"}
+            </Text>
+          </Pressable>
+
           {step === "silent" ? (
-            <Pressable className="mt-6 rounded-2xl bg-ink px-5 py-4" onPress={() => setStep("surface")}>
+            <Pressable
+              className="mt-4 rounded-2xl bg-ink px-5 py-4"
+              onPress={() => (surfacing.shouldSurface ? setStep("surface") : setStep("silent"))}
+            >
               <Text className="text-center text-base font-black text-cream">
-                Simulate rain + demand trigger
+                Run Surfacing Agent
               </Text>
             </Pressable>
           ) : null}
