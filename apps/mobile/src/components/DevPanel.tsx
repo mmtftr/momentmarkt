@@ -1,6 +1,12 @@
-import { useCallback, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
 
+import {
+  apiBase,
+  fetchHealth,
+  fetchMerchantSummary,
+  type MerchantSummary,
+} from "../lib/api";
 import { s } from "../styles";
 
 /**
@@ -92,6 +98,8 @@ export function DevPanel(props: Props): ReactElement | null {
   } = props;
 
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
+  const { apiHealthy, lastChecked } = useApiHealthPoll(10_000);
+  const merchantSummary = useMerchantSummaryPoll("berlin-mitte-cafe-bondi", 15_000);
 
   const togglePrivacy = useCallback(() => {
     setPrivacyExpanded((prev) => !prev);
@@ -110,6 +118,11 @@ export function DevPanel(props: Props): ReactElement | null {
         { padding: 16 },
       ]}
     >
+      <ApiHealthPill apiHealthy={apiHealthy} lastChecked={lastChecked} />
+      {merchantSummary ? (
+        <MerchantLivePill summary={merchantSummary} />
+      ) : null}
+
       <SectionLabel>composite_state</SectionLabel>
       <View style={s("bg-gh-chip rounded-md px-3 py-2 mb-4 border border-gh")}>
         <Text style={s("mono text-[13px] text-white")}>{compositeState}</Text>
@@ -379,5 +392,179 @@ function VariantSegment({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+// ── live API hooks (issue #45) ─────────────────────────────────────────────
+//
+// These talk to the FastAPI backend via the helpers in `../lib/api`. Both
+// hooks are demo-safe: every fetcher already swallows errors and returns
+// `null`, and the visible UI degrades to a plain "API down" pill so the
+// rest of the demo keeps working from local fixtures.
+
+type ApiHealthState = {
+  apiHealthy: boolean | null;
+  lastChecked: number | null;
+};
+
+function useApiHealthPoll(intervalMs: number): ApiHealthState {
+  const [state, setState] = useState<ApiHealthState>({
+    apiHealthy: null,
+    lastChecked: null,
+  });
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    cancelledRef.current = false;
+    let abort = new AbortController();
+
+    const tick = async () => {
+      abort.abort();
+      abort = new AbortController();
+      const res = await fetchHealth(abort.signal);
+      if (cancelledRef.current) return;
+      setState({
+        apiHealthy: res?.status === "ok",
+        lastChecked: Date.now(),
+      });
+    };
+
+    tick();
+    const id = setInterval(tick, intervalMs);
+    return () => {
+      cancelledRef.current = true;
+      clearInterval(id);
+      abort.abort();
+    };
+  }, [intervalMs]);
+
+  return state;
+}
+
+function useMerchantSummaryPoll(
+  merchantId: string,
+  intervalMs: number,
+): MerchantSummary | null {
+  const [summary, setSummary] = useState<MerchantSummary | null>(null);
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    cancelledRef.current = false;
+    let abort = new AbortController();
+
+    const tick = async () => {
+      abort.abort();
+      abort = new AbortController();
+      const res = await fetchMerchantSummary(merchantId, abort.signal);
+      if (cancelledRef.current) return;
+      // On failure, keep the last known good summary on screen rather than
+      // flicker to nothing — looks cleaner if the network drops mid-demo.
+      if (res) setSummary(res);
+    };
+
+    tick();
+    const id = setInterval(tick, intervalMs);
+    return () => {
+      cancelledRef.current = true;
+      clearInterval(id);
+      abort.abort();
+    };
+  }, [merchantId, intervalMs]);
+
+  return summary;
+}
+
+function ApiHealthPill({
+  apiHealthy,
+  lastChecked,
+}: {
+  apiHealthy: boolean | null;
+  lastChecked: number | null;
+}) {
+  // Shorten the host so the pill stays inside the 260px sidecar without
+  // wrapping. Strip protocol + ".hf.space" suffix for the live deploy.
+  const host = apiBase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\.hf\.space$/, "");
+
+  const dot =
+    apiHealthy === null ? "⚪" : apiHealthy ? "\u{1F7E2}" : "\u{1F534}";
+  const label =
+    apiHealthy === null
+      ? "checking…"
+      : apiHealthy
+        ? `API: ${host}`
+        : "API: down (using fixtures)";
+  const toneStyle =
+    apiHealthy === null
+      ? s("text-gh-low")
+      : apiHealthy
+        ? s("text-gh-good")
+        : s("text-gh-warn");
+
+  const checkedAt =
+    lastChecked != null ? new Date(lastChecked).toLocaleTimeString() : null;
+
+  return (
+    <View
+      style={[
+        ...s("flex-row items-center bg-gh-chip rounded-md px-3 py-2 mb-3 border border-gh"),
+        { gap: 8 },
+      ]}
+    >
+      <Text style={s("text-[11px]")}>{dot}</Text>
+      <View style={s("flex-1")}>
+        <Text style={[...s("mono text-[10px] font-semibold"), ...toneStyle]} numberOfLines={1}>
+          {label}
+        </Text>
+        {checkedAt ? (
+          <Text style={s("mono text-[10px] text-gh-low")} numberOfLines={1}>
+            checked {checkedAt}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function MerchantLivePill({ summary }: { summary: MerchantSummary }) {
+  // Live counters from `/merchants/{id}/summary`. Confirms to the judge
+  // that the mobile app is talking to the same backend as the merchant
+  // inbox — same endpoint, same merchant id, same numbers.
+  return (
+    <View style={s("bg-gh-chip rounded-md px-3 py-2 mb-3 border border-gh")}>
+      <Text style={s("mono text-[10px] uppercase tracking-[0.5px] text-gh-low")} numberOfLines={1}>
+        live · {summary.merchant_id}
+      </Text>
+      <View style={[...s("flex-row mt-1"), { gap: 10 }]}>
+        <LiveCounter label="surfaced" value={summary.surfaced} />
+        <LiveCounter label="redeemed" value={summary.redeemed} accent />
+        <LiveCounter label="offers" value={summary.offer_count} />
+      </View>
+    </View>
+  );
+}
+
+function LiveCounter({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+}) {
+  return (
+    <View>
+      <Text style={s("mono text-[10px] text-gh-low")}>{label}</Text>
+      <Text
+        style={[
+          ...s("mono text-[13px] font-semibold"),
+          accent ? s("text-gh-good") : s("text-white"),
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
