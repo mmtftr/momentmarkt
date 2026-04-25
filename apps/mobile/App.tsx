@@ -1,4 +1,4 @@
-import BottomSheet from "@gorhom/bottom-sheet";
+import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { StatusBar } from "expo-status-bar";
 import {
   type ComponentProps,
@@ -249,19 +249,21 @@ export default function App() {
         handleStyle={{ paddingTop: 10, paddingBottom: 6 }}
         enablePanDownToClose={false}
       >
-        <SheetBody
-          step={step}
-          city={city}
-          cityProfile={cityProfile}
-          widgetVariant={widgetVariant}
-          highIntent={highIntent}
-          aggressiveHeadline={aggressiveHeadline}
-          animatedIndex={animatedIndex}
-          onWidgetVariantChange={setWidgetVariant}
-          onWidgetCta={handleAdvanceFromOffer}
-          onRedeemComplete={handleRedeemComplete}
-          onSuccessDone={handleResetToSilent}
-        />
+        <BottomSheetView style={{ flex: 1, backgroundColor: "#17120f" }}>
+          <SheetBody
+            step={step}
+            city={city}
+            cityProfile={cityProfile}
+            widgetVariant={widgetVariant}
+            highIntent={highIntent}
+            aggressiveHeadline={aggressiveHeadline}
+            animatedIndex={animatedIndex}
+            onWidgetVariantChange={setWidgetVariant}
+            onWidgetCta={handleAdvanceFromOffer}
+            onRedeemComplete={handleRedeemComplete}
+            onSuccessDone={handleResetToSilent}
+          />
+        </BottomSheetView>
       </BottomSheet>
 
       {/* Verlauf / History overlay (issue #39). Renders above the map+sheet
