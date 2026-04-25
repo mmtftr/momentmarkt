@@ -59,6 +59,71 @@ surfaced/accepted/redeemed/budget counters for the 20-30s merchant cut.
 
 Architecture slide source lives in `assets/architecture-slide.md`.
 
+## Submission Summary
+
+**MomentMarkt** is a generative city wallet for the DSV-Gruppe **CITY WALLET**
+track. Two cooperating agents — an **Opportunity Agent** that drafts offers
+and GenUI widget specs from three live triggers (weather, events, demand) and
+a **Surfacing Agent** that decides whether and how to surface an
+already-approved offer in real time — power one neutral wallet UI. The
+Surfacing Agent stays silent by default and is boosted by **high-intent**
+signals (active screen time, map-app foreground, in-app coupon browsing); the
+LLM is invoked at most once per agent output (one draft for Opportunity, one
+headline rewrite per fired surface for Surfacing). Live demo runs on iOS
+Simulator: Mia spine end-to-end, three structurally different GenUI widgets
+for one merchant, on-screen `{intent_token, h3_cell_r8}` privacy boundary,
+high-intent dev-panel toggle, simulated girocard checkout, merchant inbox
+with the per-merchant demand-curve view, live `cities/berlin.yaml` ↔
+`cities/zurich.yaml` config swap.
+
+### Stack lineup
+
+- **Consumer app**: React Native + Expo + TypeScript on iOS Simulator (`apps/mobile/`)
+- **Merchant inbox**: small static React + Vite web app (`apps/merchant/`)
+- **Backend**: FastAPI + SQLite (`apps/backend/`)
+- **LLM**: Azure OpenAI behind LiteLLM (provider-swappable)
+- **Geo**: H3 resolution-8 coarse cells (~1 km) for the privacy boundary
+- **Datasets**: Open-Meteo (live weather), OpenStreetMap via Overpass (937
+  Berlin Mitte / 2096 Zürich HB POIs), VBB GTFS (403 stops within 1 km of
+  Alexanderplatz), an events stub, and `data/transactions/berlin-density.json`
+  for 4 demo merchants
+
+Full implementation detail in `work/SPEC.md`; Devpost field drafts in
+`work/SUBMISSION.md`; agent contract in `context/AGENT_IO.md`; tech-video
+slide source in `assets/architecture-slide.md`.
+
+### Honest demo / production swaps
+
+Per the demo truth boundary in `CLAUDE.md`, the architecture slide draws three
+"production swap" callouts in a consistent visual language:
+
+| Capability | Demo (today) | Production (architectural roadmap) |
+|---|---|---|
+| **Surface path** | In-app card slides into the RN wallet on trigger fire | Opportunity Agent → push notification server (Expo Push / FCM / APNs) → device |
+| **SLM extractor** | `extract_intent_token()` server-side stub returning a hand-coded enum | On-device Phi-3-mini / Gemma-2B; only the wrapper leaves the device |
+| **Payone signal** | Hand-authored `data/transactions/berlin-density.json` (4 merchants) | Real Payone aggregation across Sparkassen — already flowing for any merchant on a Sparkassen terminal |
+
+Other deliberate scope cuts kept out of the demo: no real Web Push, no live
+on-device collection of high-intent signals (dev-panel toggle simulates), no
+real-time image generation (pre-bucketed mood library keyed by `(trigger ×
+category × weather)`), no real POS, no native iOS/Android build pipelines, no
+Tavily, no Foursquare, no CH GTFS bind on the Zürich swap.
+
+### Submission assets
+
+- **Devpost field drafts** (Short Description + 6 structured fields per
+  `context/HACKATHON.md`): `work/SUBMISSION.md`
+- **Demo video** (≤55s on iOS Simulator): _link pending — recording is the
+  user's last-mile_
+- **Tech video** (≤55s; architecture slide → live editor → live phone):
+  _link pending — recording is the user's last-mile_
+- **16:9 cover image**: _path pending_ — concept locked in
+  `work/SUBMISSION.md` under "Project cover image" (phone frame with
+  rain-trigger GenUI widget on iOS Simulator chrome over a Berlin Mitte map
+  fragment, monospace dev-panel chip top-right, neutral palette, no
+  Sparkassen branding)
+- **GitHub repo**: https://github.com/mmtftr/momentmarkt (this repo)
+
 ## Run The Backend
 
 ```bash
