@@ -1,0 +1,81 @@
+name: Deploy backend to HF Space
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend/**'
+      - 'data/**'
+      - 'cities/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/deploy-hf.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: hf-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HF_OWNER: peaktwilight
+      HF_SPACE: momentmarkt-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construct deploy tree
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/hf/apps
+          cp Dockerfile .dockerignore /tmp/hf/
+          cp -r apps/backend /tmp/hf/apps/backend
+          cp -r data /tmp/hf/data
+          cp -r cities /tmp/hf/cities
+          # Strip dirs that aren't needed at runtime to keep the Space lean.
+          rm -rf /tmp/hf/apps/backend/tests
+          # HF Spaces require a README.md with YAML frontmatter declaring the
+          # SDK; this file is regenerated each deploy so the source of truth
+          # stays in this workflow.
+          cat > /tmp/hf/README.md <<'EOF'
+          ---
+          title: MomentMarkt API
+          emoji: 🛍️
+          colorFrom: pink
+          colorTo: indigo
+          sdk: docker
+          app_port: 7860
+          pinned: false
+          license: mit
+          ---
+
+          # MomentMarkt API
+
+          Demo backend for the MomentMarkt CITY WALLET prototype (Hack-Nation 2026,
+          DSV-Gruppe track). Source repo: https://github.com/mmtftr/momentmarkt
+
+          Deployed automatically from `main` by `.github/workflows/deploy-hf.yml`.
+          Edit the source — not this Space — and the next push to `main` rebuilds.
+          EOF
+
+      - name: Push to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HF_TOKEN:-}" ]; then
+            echo "::error::HF_TOKEN secret missing. Add a write-scope token at repo Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          cd /tmp/hf
+          git init -q -b main
+          git config user.email "ci@momentmarkt.invalid"
+          git config user.name "MomentMarkt CI"
+          git add .
+          git commit -q -m "Deploy ${GITHUB_SHA::7} from main"
+          # Token-in-URL is fine here: GitHub Actions masks secrets in logs and
+          # this dir is throwaway. Force-push because the Space's history is
+          # discardable — source of truth is GitHub main.
+          git push --force "https://${HF_OWNER}:${HF_TOKEN}@huggingface.co/spaces/${HF_OWNER}/${HF_SPACE}" main 2>&1 | sed "s/${HF_TOKEN}/***/g"
+          echo "Deployed to https://huggingface.co/spaces/${HF_OWNER}/${HF_SPACE}"
