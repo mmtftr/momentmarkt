@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MomentMarkt — square logomark only, 1024×1024.
+  Designed for the iOS app icon (Expo `./assets/icon.png`) and Android
+  adaptive icon foreground. Cream background, ink M, spark dot, cocoa awning
+  trim. ~10% safe zone on every edge so a circular crop still feels balanced.
+
+  Palette (apps/mobile/src/styles.ts):
+    cream #fff8ee · ink #17120f · cocoa #6f3f2c · spark #f2542d · rain #356f95
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1024 1024"
+     width="1024" height="1024"
+     role="img"
+     aria-label="MomentMarkt app icon">
+  <title>MomentMarkt</title>
+
+  <!-- Full-bleed cream tile (iOS uses solid bg under rounded mask). -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#fff8ee" />
+
+  <!-- Subtle warm wash, top-right, to echo the Devpost cover gradient. -->
+  <defs>
+    <radialGradient id="warm" cx="78%" cy="22%" r="80%">
+      <stop offset="0%" stop-color="#fbe7c8" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#fff8ee" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#warm)" />
+
+  <!-- ── INNER PLATE ─────────────────────────────────────────────────
+       Generous 10% safe zone: plate spans 102..922 in both axes.
+       Rounded corners suggest a storefront / awning silhouette.
+       Cocoa hairline gives the mark a quiet edge under iOS rounded mask.
+  -->
+  <rect x="102" y="102" width="820" height="820"
+        rx="180" ry="180"
+        fill="#fff8ee"
+        stroke="#6f3f2c"
+        stroke-width="6"
+        stroke-opacity="0.18" />
+
+  <!-- ── AWNING TRIM ────────────────────────────────────────────────
+       Thin cocoa underline at the bottom of the plate hints at a
+       market-stall awning band without competing with the M.
+  -->
+  <rect x="172" y="788" width="680" height="6"
+        rx="3" ry="3"
+        fill="#6f3f2c"
+        fill-opacity="0.35" />
+
+  <!-- ── STYLIZED 'M' ────────────────────────────────────────────────
+       Open ink stroke. Same geometry as the small mark in logo.svg,
+       scaled up. Bottom feet sit on the awning band; peaks reach the
+       upper third; the V-notch dips to the visual center.
+       Coordinates: feet at y=780, peaks at y=260, notch tip at y=560.
+  -->
+  <path d="M 252 780 L 252 260 L 512 580 L 772 260 L 772 780"
+        fill="none"
+        stroke="#17120f"
+        stroke-width="74"
+        stroke-linecap="round"
+        stroke-linejoin="round" />
+
+  <!-- ── THE 'MOMENT' ────────────────────────────────────────────────
+       Spark-red dot inside the V-notch. Sits just below the notch tip
+       so it reads as a single tick / pulse — the moment captured.
+  -->
+  <circle cx="512" cy="652" r="42" fill="#f2542d" />
+
+  <!-- Soft halo around the spark to give the dot a tiny bit of life
+       without leaving the flat-icon language iOS prefers. -->
+  <circle cx="512" cy="652" r="64"
+          fill="none"
+          stroke="#f2542d"
+          stroke-width="4"
+          stroke-opacity="0.25" />
+</svg>

@@ -1,6 +1,6 @@
 <div align="center">
 
-# MomentMarkt
+<img src="./assets/logo.svg" alt="MomentMarkt" width="320" />
 
 **The marketing department small merchants don't have, generated for the moment, redeemed through the rail the bank already operates.**
 
