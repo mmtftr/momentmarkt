@@ -11,6 +11,15 @@ const colors = {
   white: "#ffffff",
   neutral600: "#525252",
   neutral200: "#e5e5e5",
+  // GitHub-dark "OpenAI dev panel" palette for the DevPanel sidecar (issue #25).
+  ghBg: "#0d1117",
+  ghChip: "#1f2937",
+  ghBorder: "#30363d",
+  ghLow: "#7d8590",
+  ghGood: "#3fb950",
+  ghWarn: "#f0883e",
+  ghBtn: "#238636",
+  ghBtnAlt: "#2ea043",
 };
 
 const base: Record<string, Style> = {
@@ -129,6 +138,37 @@ const base: Record<string, Style> = {
   "mb-4": { marginBottom: 16 },
   "mb-5": { marginBottom: 20 },
   "my-6": { marginVertical: 24 },
+  // ─── DevPanel sidecar (issue #25) — GitHub-dark "OpenAI dev panel" tokens ─
+  "bg-gh-bg": { backgroundColor: colors.ghBg },
+  "bg-gh-chip": { backgroundColor: colors.ghChip },
+  "bg-gh-border": { backgroundColor: colors.ghBorder },
+  "bg-gh-good": { backgroundColor: colors.ghGood },
+  "bg-gh-warn": { backgroundColor: colors.ghWarn },
+  "bg-gh-btn": { backgroundColor: colors.ghBtn },
+  "bg-gh-btn-alt": { backgroundColor: colors.ghBtnAlt },
+  "border-gh": { borderColor: colors.ghBorder },
+  "border-l-gh": { borderLeftColor: colors.ghBorder, borderLeftWidth: 1 },
+  "text-gh-low": { color: colors.ghLow },
+  "text-gh-good": { color: colors.ghGood },
+  "text-gh-warn": { color: colors.ghWarn },
+  mono: { fontFamily: "Menlo" },
+  "text-[10px]": { fontSize: 10 },
+  "text-[13px]": { fontSize: 13 },
+  "tracking-[0.5px]": { letterSpacing: 0.5 },
+  "w-[260px]": { width: 260 },
+  "h-[6px]": { height: 6 },
+  "h-[4px]": { height: 4 },
+  "rounded-md": { borderRadius: 6 },
+  "rounded-sm": { borderRadius: 4 },
+  "self-stretch": { alignSelf: "stretch" },
+  "py-1": { paddingVertical: 4 },
+  "py-1.5": { paddingVertical: 6 },
+  "px-1": { paddingHorizontal: 4 },
+  "px-1.5": { paddingHorizontal: 6 },
+  "mb-1": { marginBottom: 4 },
+  "mb-2": { marginBottom: 8 },
+  "mt-0.5": { marginTop: 2 },
+  "overflow-hidden": { overflow: "hidden" },
 };
 
 export function s(...classNames: Array<string | false | null | undefined>): Style[] {
