@@ -161,6 +161,29 @@ h3 {
   letter-spacing: -0.05em;
 }
 
+.metric-value-pulse {
+  animation: metric-pulse 700ms ease-out;
+  transform-origin: left center;
+}
+
+@keyframes metric-pulse {
+  0% {
+    color: #18b46c;
+    transform: scale(1.08);
+    text-shadow: 0 0 18px rgba(24, 180, 108, 0.45);
+  }
+  60% {
+    color: #18b46c;
+    transform: scale(1.02);
+    text-shadow: 0 0 6px rgba(24, 180, 108, 0.2);
+  }
+  100% {
+    color: inherit;
+    transform: scale(1);
+    text-shadow: none;
+  }
+}
+
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.8fr);

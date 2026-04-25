@@ -1,11 +1,13 @@
-import { StrictMode, useState } from "react";
+import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import density from "../../../data/transactions/berlin-density.json";
 import "./styles.css";
 
+const MERCHANT_ID = "berlin-mitte-cafe-bondi";
+
 function findCafeBondi() {
   const cafeBondi = density.merchants.find(
-    (entry) => entry.id === "berlin-mitte-cafe-bondi",
+    (entry) => entry.id === MERCHANT_ID,
   );
 
   if (!cafeBondi) {
@@ -22,11 +24,48 @@ const latestSample = merchant.live_samples.find((sample) =>
 );
 const approvalRule = merchant.autopilot_rule_hints;
 const cashbackPerRedeem = merchant.offer_budget.max_cashback_eur;
-const surfaced = Math.round(merchant.demand_gap.gap_density_points * 0.4);
-const accepted = merchant.inventory_goal.target_redemptions;
-const redeemed = Math.min(7, accepted);
-const spentBudget = redeemed * cashbackPerRedeem;
-const remainingBudget = merchant.offer_budget.total_budget_eur - spentBudget;
+const fallbackSurfaced = Math.round(merchant.demand_gap.gap_density_points * 0.4);
+const fallbackAccepted = merchant.inventory_goal.target_redemptions;
+const fallbackRedeemed = Math.min(7, fallbackAccepted);
+const fallbackSpentBudget = fallbackRedeemed * cashbackPerRedeem;
+const fallbackTotalBudget = merchant.offer_budget.total_budget_eur;
+
+type MerchantStats = {
+  merchant_id: string;
+  offer_count: number;
+  surfaced: number;
+  redeemed: number;
+  budget_total: number;
+  budget_spent: number;
+  offers: unknown[];
+};
+
+function useMerchantStats(merchantId: string, intervalMs = 2000) {
+  const [stats, setStats] = useState<MerchantStats | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const baseUrl =
+      import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const fetchStats = async () => {
+      try {
+        const r = await fetch(`${baseUrl}/merchants/${merchantId}/summary`);
+        if (!cancelled && r.ok) {
+          const data = (await r.json()) as MerchantStats;
+          setStats(data);
+        }
+      } catch {
+        // demo-safe: keep last-known stats on failure
+      }
+    };
+    fetchStats();
+    const id = setInterval(fetchStats, intervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [merchantId, intervalMs]);
+  return stats;
+}
 
 function euro(amount: number) {
   return new Intl.NumberFormat("de-DE", {
@@ -45,9 +84,17 @@ function percent(value: number) {
 
 function App() {
   const [eventRuleEnabled, setEventRuleEnabled] = useState(false);
-  const budgetUsedPercent = Math.round(
-    (spentBudget / merchant.offer_budget.total_budget_eur) * 100,
-  );
+  const stats = useMerchantStats(MERCHANT_ID, 2000);
+
+  const surfaced = stats?.surfaced ?? fallbackSurfaced;
+  const redeemed = stats?.redeemed ?? fallbackRedeemed;
+  const accepted = Math.max(redeemed, fallbackAccepted);
+  const totalBudget = stats?.budget_total || fallbackTotalBudget;
+  const spentBudget = stats?.budget_spent ?? fallbackSpentBudget;
+  const remainingBudget = Math.max(0, totalBudget - spentBudget);
+  const budgetUsedPercent = totalBudget
+    ? Math.min(100, Math.round((spentBudget / totalBudget) * 100))
+    : 0;
 
   return (
     <main className="shell">
@@ -61,7 +108,7 @@ function App() {
           </p>
         </div>
         <div className="status-pill">
-          <span className="pulse" /> Auto-approved 3h ago
+          <span className="pulse" /> {stats ? "Live" : "Auto-approved 3h ago"}
         </div>
       </section>
 
@@ -72,7 +119,7 @@ function App() {
         <Metric
           label="Budget left"
           value={euro(remainingBudget)}
-          detail={`${euro(spentBudget)} used of ${euro(merchant.offer_budget.total_budget_eur)}`}
+          detail={`${euro(spentBudget)} used of ${euro(totalBudget)}`}
         />
       </section>
 
@@ -159,10 +206,22 @@ function App() {
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  const previousValue = useRef(value);
+  const [pulseKey, setPulseKey] = useState(0);
+
+  useEffect(() => {
+    if (previousValue.current !== value) {
+      previousValue.current = value;
+      setPulseKey((k) => k + 1);
+    }
+  }, [value]);
+
   return (
     <article className="metric-card">
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong key={pulseKey} className="metric-value metric-value-pulse">
+        {value}
+      </strong>
       <small>{detail}</small>
     </article>
   );
