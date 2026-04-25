@@ -1,4 +1,30 @@
-# hack-workflow
+# MomentMarkt
+
+Generative city wallet prototype for the DSV-Gruppe CITY WALLET challenge.
+
+Current implementation direction is tracked in `work/SPEC.md`: Expo React
+Native consumer app, small merchant web surface, FastAPI/fixtures as needed.
+
+## Run The Mobile App
+
+```bash
+pnpm install
+pnpm mobile:ios
+```
+
+Useful commands:
+
+```bash
+pnpm mobile:start
+pnpm mobile:android
+pnpm mobile:web
+pnpm mobile:typecheck
+```
+
+The Expo app lives in `apps/mobile`. It is the canonical consumer demo surface;
+the older untracked Next.js scaffold under `src/` is obsolete per `spec-v03`.
+
+## Planning Workflow
 
 A file-driven multi-agent workflow for hackathon planning with a data-exploration
 front stage. Designed to run via subagents (Claude Code's Task tool) with a

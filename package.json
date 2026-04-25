@@ -1,0 +1,12 @@
+{
+  "name": "momentmarkt",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "mobile:start": "pnpm --dir apps/mobile start",
+    "mobile:ios": "pnpm --dir apps/mobile ios",
+    "mobile:android": "pnpm --dir apps/mobile android",
+    "mobile:web": "pnpm --dir apps/mobile web",
+    "mobile:typecheck": "pnpm --dir apps/mobile typecheck"
+  }
+}
