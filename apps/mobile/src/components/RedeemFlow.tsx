@@ -9,6 +9,7 @@ import {
 } from "../lib/redeem";
 import { CheckoutSuccessScreen } from "../screens/CheckoutSuccessScreen";
 import { QrRedeemScreen } from "../screens/QrRedeemScreen";
+import { s } from "../styles";
 
 type Props = {
   offer: DemoOffer;
@@ -81,12 +82,12 @@ export function RedeemFlow({
 
   if (state === "tapping") {
     return (
-      <View className="flex-1 items-center justify-center bg-ink px-5">
+      <View style={s("flex-1 items-center justify-center bg-ink px-5")}>
         <ActivityIndicator size="large" color="#fff8ee" />
-        <Text className="mt-4 text-xs font-bold uppercase tracking-[3px] text-cream/70">
+        <Text style={s("mt-4 text-xs font-bold uppercase tracking-[3px] text-cream/70")}>
           Routing girocard tap…
         </Text>
-        <Text className="mt-2 text-base font-semibold text-cream">
+        <Text style={s("mt-2 text-base font-semibold text-cream")}>
           Simulating checkout via Sparkasse rail
         </Text>
       </View>

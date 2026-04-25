@@ -20,6 +20,7 @@
 - Assign the GitHub issue to yourself when you take it. If you cannot assign yourself, leave a clear comment with your GitHub username / machine / agent.
 - One issue per laptop/agent at a time unless explicitly coordinated.
 - Push the completed work before closing the issue.
+- During active implementation, commit and push each coherent update before moving on to the next UI/design/backend change so teammates can review and continue from `origin/main`.
 - Only close issues after the relevant commit is on `origin/main` or after a PR is merged.
 - When closing an issue, comment with the commit hash or PR link and a short completion note.
 - Do not delete or overwrite another teammate's untracked work without a direct sync.
@@ -34,8 +35,8 @@
 4. Pull/rebase latest `origin/main` before editing.
 5. Make the smallest scoped change for that issue.
 6. Validate locally with the fastest relevant command.
-7. Commit with a concise message.
-8. Pull/rebase again, then push.
+7. Commit each coherent update with a concise message; do not batch unrelated UI, docs, backend, or packaging work.
+8. Pull/rebase again, then push immediately after that commit.
 9. Close the issue only after push/merge, referencing the commit.
 10. Move to the next unclaimed issue.
 

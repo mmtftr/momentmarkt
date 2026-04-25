@@ -17,6 +17,7 @@ Read these before work:
 - Self-assign by commenting on the issue before editing: `Taking this on <machine/agent>`.
 - Also assign the issue to your GitHub user when permissions allow.
 - Keep changes scoped to the issue.
+- During active implementation, commit and push each coherent update before starting another substantive change.
 - If blocked, comment the blocker and move to a different unclaimed issue.
 - Push completed work before closing an issue.
 - Close issues only after the relevant commit is on `origin/main` or after the PR is merged.
@@ -28,8 +29,8 @@ Read these before work:
 2. Claim: comment on the issue and assign it to yourself.
 3. Build: change only files required by the issue.
 4. Verify: run the smallest relevant validation command.
-5. Commit: use a concise message describing the delivered unit.
-6. Push: `git pull --rebase origin main && git push origin main`.
+5. Commit: use a concise message describing the delivered unit; prefer small coherent commits over large batches.
+6. Push immediately after each commit: `git pull --rebase origin main && git push origin main`.
 7. Close: close the issue with the pushed commit hash.
 
 ## Architecture Direction

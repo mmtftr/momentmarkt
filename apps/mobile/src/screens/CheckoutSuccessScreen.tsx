@@ -10,6 +10,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { s } from "../styles";
+
 type Props = {
   cashbackEur: number;
   /** Optional merchant counter / budget remaining for the dev-panel feel. */
@@ -64,32 +66,30 @@ export function CheckoutSuccessScreen({ cashbackEur, budgetRemaining, onDone }: 
   }));
 
   return (
-    <View className="flex-1 bg-spark px-5 py-6">
-      <View className="flex-1 items-center justify-center">
+    <View style={s("flex-1 bg-spark px-5 py-6")}>
+      <View style={s("flex-1 items-center justify-center")}>
         <Animated.View
-          style={sparkleStyle}
-          className="absolute h-72 w-72 rounded-full bg-white/15"
+          style={[sparkleStyle, ...s("absolute h-72 w-72 rounded-full bg-white/15")]}
         />
         <Animated.View
-          style={checkStyle}
-          className="h-32 w-32 items-center justify-center rounded-full bg-white"
+          style={[checkStyle, ...s("h-32 w-32 items-center justify-center rounded-full bg-white")]}
         >
-          <Text className="text-5xl font-black text-spark">✓</Text>
+          <Text style={s("text-5xl font-black text-spark")}>✓</Text>
         </Animated.View>
 
-        <Animated.View style={headlineStyle} className="mt-8 items-center px-2">
-          <Text className="text-center text-xs font-bold uppercase tracking-[3px] text-white/80">
+        <Animated.View style={[headlineStyle, ...s("mt-8 items-center px-2")]}> 
+          <Text style={s("text-center text-xs font-bold uppercase tracking-[3px] text-white/80")}>
             Cashback gutgeschrieben
           </Text>
-          <Text className="mt-3 text-center text-4xl font-black leading-[44px] text-white">
+          <Text style={s("mt-3 text-center text-4xl font-black leading-[44px] text-white")}>
             +€{cashbackEur.toFixed(2)}
           </Text>
-          <Text className="mt-2 text-center text-sm font-semibold text-white/80">
+          <Text style={s("mt-2 text-center text-sm font-semibold text-white/80")}>
             via girocard simulation
           </Text>
           {typeof budgetRemaining === "number" ? (
-            <View className="mt-5 rounded-full bg-white/15 px-4 py-2">
-              <Text className="text-xs font-bold uppercase tracking-[2px] text-white">
+            <View style={s("mt-5 rounded-full bg-white/15 px-4 py-2")}>
+              <Text style={s("text-xs font-bold uppercase tracking-[2px] text-white")}>
                 Merchant budget remaining: €{budgetRemaining.toFixed(2)}
               </Text>
             </View>
@@ -99,10 +99,10 @@ export function CheckoutSuccessScreen({ cashbackEur, budgetRemaining, onDone }: 
 
       <Pressable
         accessibilityRole="button"
-        className="rounded-2xl bg-white px-5 py-4"
+        style={s("rounded-2xl bg-white px-5 py-4")}
         onPress={onDone}
       >
-        <Text className="text-center text-base font-black text-spark">Done</Text>
+        <Text style={s("text-center text-base font-black text-spark")}>Done</Text>
       </Pressable>
     </View>
   );
