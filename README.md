@@ -53,6 +53,30 @@ surfaced/accepted/redeemed/budget counters for the 20-30s merchant cut.
 
 Architecture slide source lives in `assets/architecture-slide.md`.
 
+## Run The Backend
+
+```bash
+pnpm backend:start
+```
+
+The FastAPI service lives in `apps/backend` and exposes:
+
+- `GET /health`
+- `GET /cities`
+- `GET /signals/{city}`
+- `POST /opportunity/generate`
+
+It is fixture-first and demo-safe. Pass `{"use_llm": true}` to
+`/opportunity/generate` after configuring LiteLLM provider environment variables
+to try live Opportunity Agent generation; failed LLM calls fall back to validated
+fixture JSON.
+
+Validate with:
+
+```bash
+pnpm backend:test
+```
+
 ## Planning Workflow
 
 A file-driven multi-agent workflow for hackathon planning with a data-exploration

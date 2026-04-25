@@ -1,0 +1,19 @@
+{
+  "city": "Berlin",
+  "display_area": "Berlin Mitte",
+  "currency": "EUR",
+  "timezone": "Europe/Berlin",
+  "density_fixture": "berlin",
+  "weather_fixture": "berlin",
+  "events_fixture": "berlin",
+  "osm_fixture": "berlin-mitte",
+  "demo": {
+    "time_local": "2026-04-25T13:30:00+02:00",
+    "weather_trigger": "rain_incoming",
+    "event_id": "bln-005",
+    "privacy_envelope": {
+      "intent_token": "intent.warm-drink.browse.lunch",
+      "h3_cell_r8": "881f1d489dfffff"
+    }
+  }
+}

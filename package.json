@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "backend:start": "uv run --project apps/backend uvicorn momentmarkt_backend.main:app --reload",
+    "backend:test": "uv run --project apps/backend --extra dev pytest",
     "merchant:dev": "pnpm --dir apps/merchant dev",
     "merchant:build": "pnpm --dir apps/merchant build",
     "merchant:typecheck": "pnpm --dir apps/merchant typecheck",
