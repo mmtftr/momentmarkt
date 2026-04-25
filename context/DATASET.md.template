@@ -1,0 +1,28 @@
+# Dataset
+
+<!-- Fill in after the challenge track releases a dataset. -->
+
+## Location
+
+<path on disk or URL>
+
+## Format
+
+<csv / parquet / jsonl / sqlite / collection of files / etc.>
+
+## Access notes
+
+<auth, download command, credentials, any preprocessing already done>
+
+## Known documentation
+
+<links to a README, data dictionary, paper, or track-provided doc. Paste key
+excerpts here if the doc lives elsewhere.>
+
+## Shape (if quickly knowable)
+
+<rows, cols, size on disk>
+
+## Sensitive content
+
+<anything the explorer should avoid logging in full — PII, proprietary text, etc.>

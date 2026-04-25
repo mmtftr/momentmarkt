@@ -1,0 +1,10 @@
+# Pre-staged datasets — bulky and/or trivially refetchable.
+# Refresh recipes live in data/README.md and data/fsq/FETCH_LATER.md.
+data/weather/
+data/osm/
+data/gtfs/
+data/events/*.json
+data/fsq/*.parquet
+
+# OS junk
+.DS_Store
