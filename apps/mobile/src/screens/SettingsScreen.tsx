@@ -1,4 +1,10 @@
-import { type ReactElement, type ReactNode, useEffect, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
 import {
   Pressable,
   ScrollView,
@@ -16,6 +22,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { DevPanel } from "../components/DevPanel";
 import { s } from "../styles";
 
 /**
@@ -37,10 +44,23 @@ import { s } from "../styles";
  *    that hides the {intent_token, h3_cell_r8} chip in the dev panel)
  *  - Sprache (DE / EN segmented control — real toggle if onSetLanguage given)
  *  - Demo-Steuerung (yellow-outlined debug section; only "reset" is real)
+ *  - Demo & Debug (issue #80) — full DevPanel inlined as a Settings section
+ *    so the engineering surface stays reachable from the gear icon even when
+ *    the contextual chip / icon are hidden on non-silent steps. Pure passthrough
+ *    of all props from App.tsx; `onRunSurfacing` is wrapped to also close the
+ *    Settings overlay so the surfacing beat plays out on the underlying sheet.
  *  - Über MomentMarkt (version, credits, GitHub, sponsor, hackathon)
  */
 
 type Language = "de" | "en";
+
+/** Props the parent must thread through so we can render the DevPanel inline.
+ *  Mirrors `ComponentProps<typeof DevPanel>` minus `visible` (we always want
+ *  the inline DevPanel visible inside the Settings section). */
+type DevPanelPassthroughProps = Omit<
+  ComponentProps<typeof DevPanel>,
+  "visible"
+>;
 
 type Props = {
   visible: boolean;
@@ -53,6 +73,10 @@ type Props = {
   onSetLanguage?: (lang: Language) => void;
   /** Real action — bumps the demo state machine back to silent. */
   onResetDemo?: () => void;
+  /** Issue #80: full DevPanel prop bag rendered as a "Demo & Debug" section.
+   *  Optional — when omitted we skip the section entirely so unit tests and
+   *  legacy call sites keep working. */
+  devPanelProps?: DevPanelPassthroughProps;
 };
 
 export function SettingsScreen(props: Props): ReactElement | null {
@@ -64,6 +88,7 @@ export function SettingsScreen(props: Props): ReactElement | null {
     language = "de",
     onSetLanguage,
     onResetDemo,
+    devPanelProps,
   } = props;
 
   const insets = useSafeAreaInsets();
@@ -218,6 +243,43 @@ export function SettingsScreen(props: Props): ReactElement | null {
             />
           </View>
         </GroupedSection>
+
+        {/* ── Demo & Debug (issue #80) ─────────────────────────────────
+            Full DevPanel rendered inline as a settings section. Lets the
+            engineering surface stay reachable from the gear icon even when
+            the contextual top chip + dev icon are hidden on non-silent
+            steps. The `onRunSurfacing` button needs to dismiss Settings so
+            the bottom-sheet animation can play; we wrap it here rather than
+            in App.tsx so the parent can pass a single source-of-truth
+            handler. */}
+        {devPanelProps ? (
+          <>
+            <SectionHeader>Demo &amp; Debug</SectionHeader>
+            <View
+              style={[
+                ...s("rounded-2xl overflow-hidden"),
+                {
+                  borderWidth: 1,
+                  borderColor: "#30363d",
+                },
+              ]}
+            >
+              <DevPanel
+                {...devPanelProps}
+                visible={true}
+                onRunSurfacing={() => {
+                  onClose();
+                  devPanelProps.onRunSurfacing();
+                }}
+              />
+            </View>
+            <SectionFooter>
+              Engineering-Sidecar inline. Auf nicht-Silent-Schritten ist die
+              kleine Werkzeug-Schaltfläche oben rechts ausgeblendet — alle
+              Hebel leben hier.
+            </SectionFooter>
+          </>
+        ) : null}
 
         {/* ── Demo-Steuerung ──────────────────────────────────────────── */}
         <SectionHeader>Demo-Steuerung</SectionHeader>

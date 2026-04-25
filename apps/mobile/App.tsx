@@ -281,8 +281,11 @@ export default function App() {
       {/* Apple-Maps-style search chip floating top-center (issue #70 part C).
           Pure presentational; tap routes to the DevPanel overlay so the
           city/weather chip doubles as a discoverable engineering surface
-          entry point during the demo. */}
-      {!sideBySide ? (
+          entry point during the demo.
+          Issue #80: only render on the silent step. Once an offer / receipt /
+          history surface is the focus, the chip becomes redundant context and
+          would compete with the consumer view — hide it. */}
+      {!sideBySide && step === "silent" && view === "demo" ? (
         <MapTopChip
           city={city === "berlin" ? "Berlin" : "Zürich"}
           area={city === "berlin" ? "Mitte" : "HB"}
@@ -296,8 +299,13 @@ export default function App() {
 
       {/* Top-right DevPanel trigger (issue #70 part B). Replaces the old
           horizontal collapsed strip with a compact 32×32 round button that
-          opens the full DevPanel as a slide-in overlay. */}
-      {!sideBySide ? (
+          opens the full DevPanel as a slide-in overlay.
+          Issue #80: also gated on the silent step so the consumer view
+          (Offer/Redeem/Success/History) stays free of presenter affordances.
+          The same DevPanel content is also reachable from the gear icon →
+          Settings → "Demo & Debug" section, so no engineering surface is
+          lost — just contextually hidden. */}
+      {!sideBySide && step === "silent" && view === "demo" ? (
         <DevPanelTrigger topInset={insets.top} onPress={handleOpenDevPanel} />
       ) : null}
 
@@ -377,6 +385,7 @@ export default function App() {
         language={language}
         onSetLanguage={handleSetLanguage}
         onResetDemo={handleResetDemoFromSettings}
+        devPanelProps={devPanelProps}
       />
 
       {/* DevPanel overlay (issue #70 part B). Compact mode only — wide-mode
