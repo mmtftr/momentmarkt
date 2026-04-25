@@ -21,6 +21,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
 import { DevPanel } from "../components/DevPanel";
 import { s } from "../styles";
@@ -152,9 +153,7 @@ export function SettingsScreen(props: Props): ReactElement | null {
             },
           ]}
         >
-          <Text style={[...s("text-base font-black text-ink"), { lineHeight: 18 }]}>
-            ✕
-          </Text>
+          <Ionicons name="close" size={20} color="#17120f" />
         </Pressable>
       </View>
 
@@ -308,7 +307,7 @@ export function SettingsScreen(props: Props): ReactElement | null {
             <Text style={s("text-base font-bold text-ink")}>
               Reset demo
             </Text>
-            <Text style={[...s("text-base text-spark"), { lineHeight: 18 }]}>↺</Text>
+            <Ionicons name="refresh" size={20} color="#f2542d" />
           </Pressable>
         </View>
         <SectionFooter>
@@ -414,9 +413,7 @@ function ActionRow({ label, onPress }: { label: string; onPress?: () => void }) 
       ]}
     >
       <Text style={s("text-base text-ink")}>{label}</Text>
-      <Text style={[...s("text-base"), { color: "rgba(23, 18, 15, 0.3)", lineHeight: 18 }]}>
-        ›
-      </Text>
+      <Ionicons name="chevron-forward" size={18} color="#737373" />
     </Pressable>
   );
 }

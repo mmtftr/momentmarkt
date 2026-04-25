@@ -7,7 +7,7 @@ import Animated, {
   withDelay,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Path } from "react-native-svg";
+import { Ionicons } from "@expo/vector-icons";
 
 import { s } from "../styles";
 
@@ -304,7 +304,7 @@ export function CheckoutSuccessScreen({ cashbackEur, budgetRemaining, onDone }: 
           ))}
         </View>
 
-        {/* Hero checkmark: 80px ink circle with cream SVG check (was 128px). */}
+        {/* Hero checkmark: 80px ink circle with cream Ionicons check (was 128px). */}
         <Animated.View
           style={[
             checkStyle,
@@ -318,16 +318,7 @@ export function CheckoutSuccessScreen({ cashbackEur, budgetRemaining, onDone }: 
             },
           ]}
         >
-          <Svg width={44} height={44} viewBox="0 0 24 24">
-            <Path
-              d="M5 12.5l4.5 4.5L19 7.5"
-              stroke="#fff8ee"
-              strokeWidth={3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          </Svg>
+          <Ionicons name="checkmark" size={48} color="#fff8ee" />
         </Animated.View>
 
         {/* 3. Big amount — 64px ultralight, spark-red, German comma decimals. */}

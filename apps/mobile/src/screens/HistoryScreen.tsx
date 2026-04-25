@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { s } from "../styles";
 
@@ -169,7 +170,7 @@ export function HistoryScreen({
   if (redemptions.length === 0) {
     return (
       <View style={s("flex-1 bg-cream items-center justify-center px-5")}>
-        <Text style={[{ fontSize: 60 }]}>🪙</Text>
+        <Ionicons name="wallet-outline" size={56} color="#737373" />
         <Text style={[...s("mt-4 text-ink"), { fontSize: 18, fontWeight: "800" }]}>
           No cashbacks yet. Get out there!
         </Text>
@@ -255,10 +256,11 @@ export function HistoryScreen({
             <View style={[{ flexDirection: "row", alignItems: "center", marginTop: 20 }]}>
               <View
                 style={[
-                  ...s("rounded-full px-3 py-1"),
-                  { backgroundColor: "rgba(242, 84, 45, 0.12)" },
+                  ...s("rounded-full flex-row items-center px-3 py-1"),
+                  { backgroundColor: "rgba(242, 84, 45, 0.12)", gap: 4 },
                 ]}
               >
+                <Ionicons name="trophy-outline" size={12} color="#f2542d" />
                 <Text
                   style={s(
                     "text-[11px] font-bold uppercase tracking-[1px] text-spark",
@@ -361,14 +363,17 @@ function RedemptionRow({ redemption }: { redemption: Redemption }) {
         <Text style={[...s("text-spark"), { fontSize: 16, fontWeight: "700" }]}>
           +€{formatEuro(redemption.cashback)}
         </Text>
-        <Text
-          style={[
-            ...s("text-neutral-600"),
-            { fontSize: 11, marginTop: 2 },
-          ]}
-        >
-          {redemption.date}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+          <Ionicons
+            name="time-outline"
+            size={11}
+            color="#737373"
+            style={{ marginRight: 3 }}
+          />
+          <Text style={[...s("text-neutral-600"), { fontSize: 11 }]}>
+            {redemption.date}
+          </Text>
+        </View>
       </View>
     </TouchableOpacity>
   );

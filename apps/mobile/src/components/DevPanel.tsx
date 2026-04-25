@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   apiBase,
@@ -193,7 +194,7 @@ export function DevPanel(props: Props): ReactElement | null {
             style={s("bg-gh-chip rounded-md px-3 py-2 mb-4 border border-gh")}
           >
             <View style={s("flex-row items-center gap-2")}>
-              <Text style={s("text-[10px]")}>{"\u{1F512}"}</Text>
+              <Ionicons name="lock-closed" size={11} color="#3fb950" />
               <Text style={s("mono text-[10px] text-white")} numberOfLines={1}>
                 {"{intent_token, h3_cell_r8}"}
               </Text>
@@ -266,11 +267,12 @@ export function DevPanel(props: Props): ReactElement | null {
 
       <Pressable
         onPress={onRunSurfacing}
-        style={s("bg-gh-btn rounded-md py-3 px-4 items-center")}
+        style={s("bg-gh-btn rounded-md py-3 px-4 flex-row items-center justify-center")}
       >
         <Text style={s("text-white font-semibold text-[13px]")}>
-          {"Run Surfacing Agent  →"}
+          {"Run Surfacing Agent  "}
         </Text>
+        <Ionicons name="arrow-forward" size={14} color="#fff" />
       </Pressable>
     </View>
   );
