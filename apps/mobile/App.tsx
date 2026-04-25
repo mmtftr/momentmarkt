@@ -27,6 +27,10 @@ import { scoreSurfacing, type SurfacingInput } from "./src/surfacing/surfacingSc
  *     phone area + DevPanel sidecar render side-by-side.
  *   - Narrow (phone portrait): they stack; DevPanel collapses to a pill that
  *     expands on tap to keep the phone canvas readable.
+ *   - `compact` prop (default: false) — when true, the DevPanel sidecar /
+ *     collapsible pill is hidden so the consumer view fills the screen for
+ *     clean polished video shots. The tech-cut keeps `compact={false}` to
+ *     show the engineering surface alongside the phone.
  *
  * High-intent toggle
  *   - DevPanel switch flips `highIntent`; surfacing score recomputes (lower
@@ -35,6 +39,17 @@ import { scoreSurfacing, type SurfacingInput } from "./src/surfacing/surfacingSc
  *     headline copy. The widget spec stays static (the SPEC describes
  *     "more aggressive headline" — chip is the cleanest demo-recordable
  *     channel without forking widgetSpecs.ts).
+ *
+ * Demo-presenter affordances (issue #38)
+ *   - The Rain / Quiet / Event widget-variant pills used to live in the
+ *     consumer Offer view as a presenter shortcut. They were leaking debug
+ *     UI into the user-facing surface. Per #38 they are gone from the
+ *     consumer view and now live exclusively in DevPanel under the
+ *     "widget_variant (debug only)" section. In a real wallet the
+ *     Opportunity Agent picks the variant; the user never sees a switcher.
+ *   - The "Toggle high-intent in the dev panel..." instructional footer is
+ *     also gone — presenters narrate the toggle, the user UI never names
+ *     the dev panel.
  */
 
 type DemoStep = "silent" | "surfacing" | "offer" | "redeeming" | "success";
@@ -43,7 +58,17 @@ type WidgetVariant = keyof typeof demoWidgetSpecs;
 const SIDE_BY_SIDE_BREAKPOINT = 820;
 const FALLBACK_CASHBACK_EUR = 1.85;
 
-export default function App() {
+type AppProps = {
+  /**
+   * When true, the DevPanel sidecar / collapsible pill is hidden so the
+   * consumer view fills the screen — used for polished video shots that
+   * shouldn't show the engineering surface. Defaults to `false` so the
+   * tech-cut and dev-loop keep the DevPanel visible.
+   */
+  compact?: boolean;
+};
+
+export default function App({ compact = false }: AppProps = {}) {
   const [step, setStep] = useState<DemoStep>("silent");
   const [highIntent, setHighIntent] = useState(false);
   const [city, setCity] = useState<DemoCityId>("berlin");
@@ -152,6 +177,10 @@ export default function App() {
     city,
     onSwapCity: handleSwapCity,
     onRunSurfacing: handleRunSurfacing,
+    // Variant picker is presenter-only: lives on the engineering surface
+    // (DevPanel) so the consumer view never shows widget-debug controls (#38).
+    widgetVariant,
+    onWidgetVariantChange: setWidgetVariant,
   };
 
   return (
@@ -164,10 +193,8 @@ export default function App() {
             city={city}
             cityProfile={cityProfile}
             widgetVariant={widgetVariant}
-            highIntent={highIntent}
             aggressiveHeadline={aggressiveHeadline}
             insetBottom={insets.bottom}
-            onWidgetVariantChange={setWidgetVariant}
             onSurfaceTap={handleSurfaceTap}
             onSurfaceDismiss={handleSurfaceDismiss}
             onWidgetCta={handleAdvanceFromOffer}
@@ -176,9 +203,14 @@ export default function App() {
             onBottomMenu={handleBottomMenu}
           />
 
-          {sideBySide ? (
+          {/* When `compact` is true the entire DevPanel surface is hidden so
+              the consumer phone view fills the screen for polished video
+              shots. Otherwise wide viewports get the sidecar and narrow
+              viewports get the collapsible pill (#38). */}
+          {!compact && sideBySide ? (
             <DevPanel {...devPanelProps} />
-          ) : (
+          ) : null}
+          {!compact && !sideBySide ? (
             <CollapsibleDevPanel
               expanded={devPanelExpanded}
               onToggle={() => setDevPanelExpanded((v) => !v)}
@@ -190,7 +222,7 @@ export default function App() {
                 },
               }}
             />
-          )}
+          ) : null}
         </View>
       </SafeAreaView>
     </View>
@@ -204,10 +236,8 @@ type PhoneAreaProps = {
   city: DemoCityId;
   cityProfile: DemoCityProfile;
   widgetVariant: WidgetVariant;
-  highIntent: boolean;
   aggressiveHeadline: string | null;
   insetBottom: number;
-  onWidgetVariantChange: (variant: WidgetVariant) => void;
   onSurfaceTap: () => void;
   onSurfaceDismiss: () => void;
   onWidgetCta: () => void;
@@ -221,10 +251,8 @@ function PhoneArea({
   city,
   cityProfile,
   widgetVariant,
-  highIntent,
   aggressiveHeadline,
   insetBottom,
-  onWidgetVariantChange,
   onSurfaceTap,
   onSurfaceDismiss,
   onWidgetCta,
@@ -242,9 +270,7 @@ function PhoneArea({
         {step === "offer" ? (
           <OfferScreen
             widgetVariant={widgetVariant}
-            highIntent={highIntent}
             aggressiveHeadline={aggressiveHeadline}
-            onWidgetVariantChange={onWidgetVariantChange}
             onWidgetCta={onWidgetCta}
           />
         ) : null}
@@ -326,19 +352,22 @@ function SilentScreen({
   );
 }
 
-// ─── Offer screen: widget variant tabs + WidgetRenderer ─────────────────────
+// ─── Offer screen: aggressive-headline chip + WidgetRenderer ───────────────
+//
+// Per #38 the consumer view shows ONE widget at a time (whichever the
+// Opportunity Agent picks; the variant comes in as a prop). The Rain /
+// Quiet / Event presenter pills and the "Toggle high-intent in the dev
+// panel..." instructional footer were removed because they leaked debug
+// affordances into the user-facing surface. Those controls now live in
+// DevPanel under "widget_variant (debug only)".
 
 function OfferScreen({
   widgetVariant,
-  highIntent,
   aggressiveHeadline,
-  onWidgetVariantChange,
   onWidgetCta,
 }: {
   widgetVariant: WidgetVariant;
-  highIntent: boolean;
   aggressiveHeadline: string | null;
-  onWidgetVariantChange: (variant: WidgetVariant) => void;
   onWidgetCta: () => void;
 }) {
   return (
@@ -354,33 +383,9 @@ function OfferScreen({
         </View>
       ) : null}
 
-      <View style={s("mb-3 flex-row gap-2")}>
-        <VariantButton
-          active={widgetVariant === "rainHero"}
-          label="Rain"
-          onPress={() => onWidgetVariantChange("rainHero")}
-        />
-        <VariantButton
-          active={widgetVariant === "quietStack"}
-          label="Quiet"
-          onPress={() => onWidgetVariantChange("quietStack")}
-        />
-        <VariantButton
-          active={widgetVariant === "preEventTicket"}
-          label="Event"
-          onPress={() => onWidgetVariantChange("preEventTicket")}
-        />
-      </View>
-
       <View style={s("flex-1")}>
         <WidgetRenderer node={demoWidgetSpecs[widgetVariant]} onRedeem={onWidgetCta} />
       </View>
-
-      {!highIntent ? (
-        <Text style={s("mt-4 text-xs text-neutral-600 text-center")}>
-          Toggle high-intent in the dev panel to re-skin the headline.
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -455,27 +460,6 @@ function BottomMenuItem({
     <Pressable onPress={onPress} style={{ alignItems: "center", flex: 1, paddingVertical: 6 }}>
       <Text style={{ color, fontSize: 17, fontWeight: "900" }}>{icon}</Text>
       <Text style={{ color, fontSize: 10, fontWeight: "900", marginTop: 3 }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function VariantButton({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={s("flex-1 rounded-2xl px-3 py-2", active ? "bg-ink" : "bg-white")}
-      onPress={onPress}
-    >
-      <Text style={s("text-center text-xs font-black", active ? "text-cream" : "text-ink")}>
-        {label}
-      </Text>
     </Pressable>
   );
 }

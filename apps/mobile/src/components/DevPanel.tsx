@@ -36,6 +36,14 @@ export type DevPanelScoreBreakdown = {
 
 export type DevPanelCity = "berlin" | "zurich";
 
+/**
+ * Widget variants exposed to the presenter for live-flipping during the
+ * demo. In production the Opportunity Agent picks the variant — these
+ * controls only exist on the engineering surface (DevPanel), never in the
+ * consumer view (per #38).
+ */
+export type DevPanelWidgetVariant = "rainHero" | "quietStack" | "preEventTicket";
+
 type Props = {
   /** When false, render nothing (consumer phone gets full width). */
   visible?: boolean;
@@ -58,6 +66,10 @@ type Props = {
   city: DevPanelCity;
   onSwapCity: () => void;
   onRunSurfacing: () => void;
+  /** Currently rendered widget variant (debug-only switcher; #38). */
+  widgetVariant?: DevPanelWidgetVariant;
+  /** Switch the rendered widget variant from the engineering surface. */
+  onWidgetVariantChange?: (variant: DevPanelWidgetVariant) => void;
 };
 
 export function DevPanel(props: Props): ReactElement | null {
@@ -75,6 +87,8 @@ export function DevPanel(props: Props): ReactElement | null {
     city,
     onSwapCity,
     onRunSurfacing,
+    widgetVariant,
+    onWidgetVariantChange,
   } = props;
 
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
@@ -188,6 +202,29 @@ export function DevPanel(props: Props): ReactElement | null {
           ios_backgroundColor="#30363d"
         />
       </View>
+
+      {widgetVariant && onWidgetVariantChange ? (
+        <>
+          <SectionLabel>widget_variant (debug only)</SectionLabel>
+          <View style={s("flex-row mb-4 bg-gh-chip rounded-md overflow-hidden border border-gh")}>
+            <VariantSegment
+              label="Rain"
+              active={widgetVariant === "rainHero"}
+              onPress={() => onWidgetVariantChange("rainHero")}
+            />
+            <VariantSegment
+              label="Quiet"
+              active={widgetVariant === "quietStack"}
+              onPress={() => onWidgetVariantChange("quietStack")}
+            />
+            <VariantSegment
+              label="Event"
+              active={widgetVariant === "preEventTicket"}
+              onPress={() => onWidgetVariantChange("preEventTicket")}
+            />
+          </View>
+        </>
+      ) : null}
 
       <SectionLabel>city_profile</SectionLabel>
       <View style={s("flex-row mb-4 bg-gh-chip rounded-md overflow-hidden border border-gh")}>
@@ -307,6 +344,35 @@ function CitySegment({
       <Text
         style={[
           ...s("text-[11px] font-semibold"),
+          active ? s("text-white") : s("text-gh-low"),
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function VariantSegment({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        ...s("flex-1 items-center py-2"),
+        active ? s("bg-gh-btn") : null,
+      ]}
+    >
+      <Text
+        style={[
+          ...s("mono text-[11px] font-semibold"),
           active ? s("text-white") : s("text-gh-low"),
         ]}
       >
