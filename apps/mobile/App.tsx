@@ -7,11 +7,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
 import { miaRainOffer } from "./src/demo/miaOffer";
+import { demoWidgetSpecs } from "./src/demo/widgetSpecs";
 
 type DemoStep = "silent" | "surface" | "redeem" | "success";
+type WidgetVariant = keyof typeof demoWidgetSpecs;
 
 export default function App() {
   const [step, setStep] = useState<DemoStep>("silent");
+  const [widgetVariant, setWidgetVariant] = useState<WidgetVariant>("rainHero");
 
   return (
     <SafeAreaView className="flex-1 bg-cream">
@@ -75,7 +78,26 @@ export default function App() {
 
         <View className="mt-5 flex-1">
           {step === "surface" ? (
-            <WidgetRenderer node={miaRainOffer.widgetSpec} onRedeem={() => setStep("redeem")} />
+            <>
+              <View className="mb-3 flex-row gap-2">
+                <VariantButton
+                  active={widgetVariant === "rainHero"}
+                  label="Rain"
+                  onPress={() => setWidgetVariant("rainHero")}
+                />
+                <VariantButton
+                  active={widgetVariant === "quietStack"}
+                  label="Quiet"
+                  onPress={() => setWidgetVariant("quietStack")}
+                />
+                <VariantButton
+                  active={widgetVariant === "preEventTicket"}
+                  label="Event"
+                  onPress={() => setWidgetVariant("preEventTicket")}
+                />
+              </View>
+              <WidgetRenderer node={demoWidgetSpecs[widgetVariant]} onRedeem={() => setStep("redeem")} />
+            </>
           ) : null}
 
           {step === "redeem" ? <RedeemCard onConfirm={() => setStep("success")} /> : null}
@@ -84,6 +106,27 @@ export default function App() {
         </View>
       </View>
     </SafeAreaView>
+  );
+}
+
+function VariantButton({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      className={`flex-1 rounded-2xl px-3 py-2 ${active ? "bg-ink" : "bg-white"}`}
+      onPress={onPress}
+    >
+      <Text className={`text-center text-xs font-black ${active ? "text-cream" : "text-ink"}`}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 

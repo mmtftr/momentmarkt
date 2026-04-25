@@ -1,19 +1,24 @@
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
-import type { WidgetNode } from "../demo/miaOffer";
+import { coerceWidgetNode } from "../genui/widgetSchema";
+import type { WidgetNode } from "../genui/widgetSchema";
 
 type Props = {
-  node: WidgetNode;
+  node: unknown;
   onRedeem: () => void;
 };
 
 export function WidgetRenderer({ node, onRedeem }: Props) {
+  return <ValidatedWidgetRenderer node={coerceWidgetNode(node)} onRedeem={onRedeem} />;
+}
+
+function ValidatedWidgetRenderer({ node, onRedeem }: { node: WidgetNode; onRedeem: () => void }) {
   switch (node.type) {
     case "View":
       return (
         <View className={node.className}>
           {node.children?.map((child, index) => (
-            <WidgetRenderer key={index} node={child} onRedeem={onRedeem} />
+            <ValidatedWidgetRenderer key={index} node={child} onRedeem={onRedeem} />
           ))}
         </View>
       );
@@ -21,7 +26,7 @@ export function WidgetRenderer({ node, onRedeem }: Props) {
       return (
         <ScrollView className={node.className} bounces={false}>
           {node.children?.map((child, index) => (
-            <WidgetRenderer key={index} node={child} onRedeem={onRedeem} />
+            <ValidatedWidgetRenderer key={index} node={child} onRedeem={onRedeem} />
           ))}
         </ScrollView>
       );
