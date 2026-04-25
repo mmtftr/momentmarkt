@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "merchant:dev": "pnpm --dir apps/merchant dev",
+    "merchant:build": "pnpm --dir apps/merchant build",
+    "merchant:typecheck": "pnpm --dir apps/merchant typecheck",
     "mobile:start": "pnpm --dir apps/mobile start",
     "mobile:ios": "pnpm --dir apps/mobile ios",
     "mobile:android": "pnpm --dir apps/mobile android",
