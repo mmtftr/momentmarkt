@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .llm_agents import run_headline_rewrite_agent
 from .storage import DemoStore
 
 
@@ -11,11 +12,12 @@ BETA = 0.5
 ALPHA = 0.35
 
 
-def evaluate_surface(
+async def evaluate_surface(
     store: DemoStore,
     wrapped_user_context: dict[str, Any],
     user_id: str = "mia",
     city_id: str | None = None,
+    use_llm: bool = False,
 ) -> dict[str, Any]:
     candidates = store.approved_offers(city_id=city_id)
     scored = [_score_candidate(offer, wrapped_user_context) for offer in candidates]
@@ -27,7 +29,9 @@ def evaluate_surface(
     top = scored[0] if scored else None
     fired = bool(top and top["score"] >= threshold)
     headline_final = None
+    headline_generated_by = None
     cache_hit = False
+    generation_log: list[str] = []
 
     if fired and top:
         offer = top["offer"]
@@ -35,9 +39,25 @@ def evaluate_surface(
         cached = store.cached_headline(offer["id"], weather_state, intent_state)
         if cached:
             headline_final = cached
+            headline_generated_by = "cache"
             cache_hit = True
         else:
-            headline_final = _rewrite_headline(offer, intent_state)
+            if use_llm:
+                try:
+                    headline_final = await run_headline_rewrite_agent(
+                        offer=offer,
+                        wrapped_user_context=wrapped_user_context,
+                        aggressive=intent_state == "active",
+                    )
+                    headline_generated_by = "pydantic_ai"
+                    generation_log.append("pydantic_ai_headline_succeeded")
+                except Exception as exc:  # pragma: no cover - provider/network dependent
+                    generation_log.append(
+                        f"pydantic_ai_headline_failed: {type(exc).__name__}: {exc}"
+                    )
+            if headline_final is None:
+                headline_final = _rewrite_headline(offer, intent_state)
+                headline_generated_by = "fixture"
             store.set_cached_headline(offer["id"], weather_state, intent_state, headline_final)
 
     store.record_surface(
@@ -58,7 +78,9 @@ def evaluate_surface(
         "intent_state": intent_state,
         "boost": boost,
         "cache_hit": cache_hit,
+        "headline_generated_by": headline_generated_by,
         "headline_final": headline_final,
+        "generation_log": generation_log,
         "offer": top["offer"] if top and fired else None,
         "widget_spec": top["offer"]["widget_spec"] if top and fired else None,
         "candidate_count": len(candidates),

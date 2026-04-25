@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
-import os
 from typing import Any
 
 from .genui import coerce_widget_node
+from .llm_agents import run_opportunity_agent
 from .signals import SignalContext
 
 
@@ -49,82 +48,21 @@ async def generate_offer(
 
     if use_llm:
         try:
-            generated = _normalize_draft(await _generate_with_litellm(context))
+            generated = _normalize_draft(await run_opportunity_agent(context))
             widget_spec, widget_valid = coerce_widget_node(generated.get("widget_spec"))
             generated["widget_spec"] = widget_spec
-            generation_log.append("litellm_generation_succeeded")
+            generation_log.append("pydantic_ai_generation_succeeded")
             if not widget_valid:
                 generation_log.append("generated_widget_invalid_used_fallback_widget")
-            return _response(context, generated, "litellm", widget_valid, False, generation_log)
+            return _response(context, generated, "pydantic_ai", widget_valid, False, generation_log)
         except Exception as exc:  # pragma: no cover - provider/network dependent
-            generation_log.append(f"litellm_generation_failed: {type(exc).__name__}: {exc}")
+            generation_log.append(f"pydantic_ai_generation_failed: {type(exc).__name__}: {exc}")
 
     generation_log.append("deterministic_fixture_offer")
     widget_spec, widget_valid = coerce_widget_node(fallback["widget_spec"])
     fallback["widget_spec"] = widget_spec
 
     return _response(context, fallback, "fixture", widget_valid, not use_llm, generation_log)
-
-
-async def _generate_with_litellm(context: SignalContext) -> dict[str, Any]:
-    model = os.environ.get("MOMENTMARKT_LLM_MODEL")
-    if not model:
-        raise RuntimeError("MOMENTMARKT_LLM_MODEL is not set")
-
-    from litellm import acompletion  # type: ignore[import-not-found]
-
-    response = await acompletion(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are the MomentMarkt Opportunity Agent. Return only valid JSON. "
-                    "Generate one merchant draft as {offer, widget_spec}. "
-                    "Allowed widget node types: View, ScrollView, Text, Image, Pressable. "
-                    "Pressable nodes must use action='redeem'."
-                ),
-            },
-            {"role": "user", "content": _prompt(context)},
-        ],
-        temperature=0.7,
-        response_format={"type": "json_object"},
-    )
-    content = response.choices[0].message.content
-    parsed = json.loads(content)
-    if not isinstance(parsed, dict):
-        raise ValueError("LLM response was not a JSON object")
-    return parsed
-
-
-def _prompt(context: SignalContext) -> str:
-    payload = {
-        "task": "Draft one Opportunity Agent output for a merchant inbox.",
-        "required_shape": {
-            "offer": {
-                "discount_type": "percent | fixed | item",
-                "discount_value": "number or item string",
-                "valid_window": {"start": "iso timestamp", "end": "iso timestamp"},
-                "copy_seed": {
-                    "headline_de": "string",
-                    "headline_en": "string",
-                    "body_de": "string",
-                    "body_en": "string",
-                },
-                "mood_image_key": "trigger.category.weather",
-                "cta": "string",
-            },
-            "widget_spec": "JSON tree of React Native primitives",
-        },
-        "signal_context": context,
-        "contract_notes": [
-            "Opportunity drafts offers and widget specs only.",
-            "Do not use high-intent signals; Surfacing handles per-user scoring and headline rewrites.",
-            "Use neutral product UI language and no Sparkassen branding.",
-            "Widget spec must be renderable through React Native primitives only.",
-        ],
-    }
-    return json.dumps(payload, ensure_ascii=True)
 
 
 def _response(

@@ -123,7 +123,7 @@ class TestGenerateOfferContract:
         assert result["generated_by"] == "fixture"
         assert result["widget_valid"] is True
         assert any(
-            "litellm_generation_failed" in entry
+            "pydantic_ai_generation_failed" in entry
             for entry in result["generation_log"]
         )
 

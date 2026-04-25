@@ -10,7 +10,7 @@ FastAPI service for the demo-safe backend path:
   and simulated redemptions to SQLite.
 - Evaluates the Surfacing Agent with deterministic scoring, silence thresholds,
   high-intent boost, and top-1 selection.
-- Falls back to deterministic known-good JSON when LiteLLM or provider credentials are unavailable.
+- Falls back to deterministic known-good JSON when Pydantic AI or provider credentials are unavailable.
 
 ## Run
 
@@ -35,20 +35,23 @@ uv run --project apps/backend --extra dev pytest
 
 ## Optional LLM Path
 
-The endpoint is fixture-first by default. To try live generation through LiteLLM,
-install the optional extra and pass `use_llm: true`:
+The endpoint is fixture-first by default. To try live generation through
+Pydantic AI, install the optional extra and pass `use_llm: true`:
 
 ```bash
-MOMENTMARKT_LLM_MODEL=azure/<deployment-name> \
+MOMENTMARKT_PYDANTIC_AI_MODEL=openai:gpt-5.2 \
 uv run --project apps/backend --extra llm uvicorn momentmarkt_backend.main:app --reload
 ```
 
-LiteLLM reads the usual provider variables, such as `AZURE_API_KEY`,
-`AZURE_API_BASE`, and `AZURE_API_VERSION`. If anything fails, the service returns
-a validated fallback and includes the fallback reason in `generation_log`.
+Pydantic AI model strings need a provider prefix, such as `openai:gpt-5.2`.
+Provider SDKs read their usual environment variables. If anything fails, the
+service returns a validated fallback and includes the fallback reason in
+`generation_log`.
 
 Per the agent contract, high-intent signals are ignored by Opportunity
 generation. Surfacing uses them later for thresholding and headline rewrites.
+Set `use_llm: true` on `/surfacing/evaluate` to use the Pydantic AI headline
+rewrite agent on cache misses.
 
 ## Request flow
 
@@ -61,7 +64,7 @@ flowchart LR
   API -->|"GET /merchants/{id}/summary"| SUM["Merchant summary"]
 
   OPP -->|use_llm=false default| FIX["Validated fixture JSON"]
-  OPP -->|use_llm=true| LLM["LiteLLM<br/>Azure / OpenAI / ..."]
+  OPP -->|use_llm=true| LLM["Pydantic AI<br/>provider model string"]
   LLM -->|valid| VAL["widget_spec validator"]
   LLM -->|failure or invalid| FIX
   VAL -->|pass| DB

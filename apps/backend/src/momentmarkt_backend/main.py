@@ -43,6 +43,7 @@ class SurfacingRequest(BaseModel):
     user_id: str = "mia"
     merchant_id: str | None = Field(default=None, examples=["berlin-mitte-cafe-bondi"])
     seed_offer: bool = True
+    use_llm: bool = False
     high_intent: dict[str, Any] | None = None
 
 
@@ -121,11 +122,12 @@ async def surfacing_evaluate(request: SurfacingRequest) -> dict[str, Any]:
 
     return {
         "wrapped_user_context": wrapped_context,
-        **evaluate_surface(
+        **await evaluate_surface(
             store=store,
             wrapped_user_context=wrapped_context,
             user_id=request.user_id,
             city_id=request.city,
+            use_llm=request.use_llm,
         ),
     }
 

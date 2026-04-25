@@ -101,7 +101,7 @@ with the per-merchant demand-curve view, live `cities/berlin.yaml` ↔
 - **Consumer app**: React Native + Expo + TypeScript on iOS Simulator (`apps/mobile/`)
 - **Merchant inbox**: small static React + Vite web app (`apps/merchant/`)
 - **Backend**: FastAPI + SQLite (`apps/backend/`)
-- **LLM**: Azure OpenAI behind LiteLLM (provider-swappable)
+- **LLM**: Pydantic AI agents over provider-swappable model strings
 - **Geo**: H3 resolution-8 coarse cells (~1 km) for the privacy boundary
 - **Datasets**: Open-Meteo (live weather), OpenStreetMap via Overpass (937
   Berlin Mitte / 2096 Zürich HB POIs), VBB GTFS (403 stops within 1 km of
@@ -158,9 +158,9 @@ The FastAPI service lives in `apps/backend` and exposes:
 - `POST /opportunity/generate`
 
 It is fixture-first and demo-safe. Pass `{"use_llm": true}` to
-`/opportunity/generate` after configuring LiteLLM provider environment variables
-to try live Opportunity Agent generation; failed LLM calls fall back to validated
-fixture JSON.
+`/opportunity/generate` or `/surfacing/evaluate` after configuring
+`MOMENTMARKT_PYDANTIC_AI_MODEL` (for example `openai:gpt-5.2`) to try live
+agent generation; failed LLM calls fall back to validated fixture JSON.
 
 Validate with:
 
