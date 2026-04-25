@@ -20,6 +20,29 @@ You are the coordinator. You do not do agent work. You dispatch.
 6. Terminate when `work/JUDGE.md` contains `VERDICT: YES` or when the user
    pauses you.
 
+```mermaid
+flowchart TD
+  START([read ARTIFACTS.md<br/>inspect work/]) --> S00{stage?}
+  S00 -->|"no DATA_PROFILE.md"| E[stage 00: EXPLORE]
+  S00 -->|"profile, no SPEC.md"| P[stage 01: PLAN]
+  S00 -->|"SPEC.md, no CRITIQUE.md"| C[stage 02: CRITIQUE]
+  S00 -->|"CRITIQUE.md not yet refined"| R[stage 02: REFINE]
+  S00 -->|"all settled"| J[stage 03: JUDGE]
+
+  E -->|writes DATA_PROFILE.md +<br/>work/explore/*| S00
+  P -->|writes SPEC.md| S00
+  C -->|writes CRITIQUE.md<br/>(maybe EXPLORATION_REQUEST.md)| S00
+  R -->|versions old SPEC<br/>writes new SPEC.md| S00
+  J --> V{verdict?}
+  V -->|YES| DONE([terminate])
+  V -->|NO| C
+
+  classDef stage fill:#fff7e6,stroke:#d39a00,color:#5a3a00;
+  classDef terminal fill:#e8fff1,stroke:#16a34a,color:#064e3b;
+  class E,P,C,R,J stage
+  class DONE terminal
+```
+
 ## Rules
 
 - **Never paste agent output into your own messages.** Reference files.

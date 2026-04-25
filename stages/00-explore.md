@@ -18,6 +18,23 @@ while True:
         invoke explorer with that question   # writes work/explore/NN-<slug>.md
 ```
 
+```mermaid
+flowchart TD
+  START([enter stage 00]) --> ID[invoke ideator<br/>writes EXPLORATION_QUEUE.md +<br/>DATA_PROFILE.md]
+  ID --> Q{queue empty?}
+  Q -->|yes| EXIT([exit to stage 01])
+  Q -->|no| B{budget<br/>exceeded?}
+  B -->|yes| EXIT
+  B -->|no| FAN[fan out: spawn one explorer<br/>per queued question<br/>parallel tool calls]
+  FAN --> EX["explorer subagents<br/>each writes work/explore/NN-slug.md"]
+  EX --> ID
+
+  classDef agent fill:#fff7e6,stroke:#d39a00,color:#5a3a00;
+  classDef terminal fill:#e8fff1,stroke:#16a34a,color:#064e3b;
+  class ID,EX agent
+  class EXIT terminal
+```
+
 ## Rules
 
 - **Budget:** default is 3 full rounds (ideator → up to 5 explorers → ideator).

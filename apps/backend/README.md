@@ -49,3 +49,35 @@ a validated fallback and includes the fallback reason in `generation_log`.
 
 Per the agent contract, high-intent signals are ignored by Opportunity
 generation. Surfacing uses them later for thresholding and headline rewrites.
+
+## Request flow
+
+```mermaid
+flowchart LR
+  C["Client<br/>(mobile / merchant)"] --> API["FastAPI<br/>momentmarkt_backend.main"]
+  API -->|"POST /opportunity/generate"| OPP["Opportunity Agent"]
+  API -->|"POST /surfacing/evaluate"| SURF["Surfacing Agent<br/>deterministic + high-intent"]
+  API -->|"POST /redeem"| RED["Redeem<br/>decrement budget"]
+  API -->|"GET /merchants/{id}/summary"| SUM["Merchant summary"]
+
+  OPP -->|use_llm=false default| FIX["Validated fixture JSON"]
+  OPP -->|use_llm=true| LLM["LiteLLM<br/>Azure / OpenAI / ..."]
+  LLM -->|valid| VAL["widget_spec validator"]
+  LLM -->|failure or invalid| FIX
+  VAL -->|pass| DB
+  VAL -->|fail| FIX
+  FIX --> DB[("SQLite<br/>offers · inbox_events ·<br/>surface_events · headline_cache ·<br/>redemptions")]
+
+  SURF --> DB
+  RED --> DB
+  SUM --> DB
+
+  classDef api fill:#eef6ff,stroke:#3a7bd5,color:#0b3d91;
+  classDef agent fill:#fff7e6,stroke:#d39a00,color:#5a3a00;
+  classDef store fill:#e8fff1,stroke:#16a34a,color:#064e3b;
+  class API api
+  class OPP,SURF,RED,SUM agent
+  class DB,FIX,LLM,VAL store
+```
+
+Fixture-first is the demo-safe default; the live LLM path is opt-in and any failure (provider down, schema invalid) collapses back to validated fallback JSON, so the recording never breaks.
