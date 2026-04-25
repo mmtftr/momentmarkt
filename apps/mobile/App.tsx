@@ -2,7 +2,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
 import { cityProfiles, type DemoCityId } from "./src/demo/cityProfiles";
@@ -19,6 +19,7 @@ export default function App() {
   const [widgetVariant, setWidgetVariant] = useState<WidgetVariant>("rainHero");
   const [highIntent, setHighIntent] = useState(false);
   const [cityId, setCityId] = useState<DemoCityId>("berlin");
+  const insets = useSafeAreaInsets();
   const city = cityProfiles[cityId];
   const surfacing = scoreSurfacing({
     ...city.surfacingInput,
@@ -28,7 +29,7 @@ export default function App() {
   return (
     <SafeAreaView style={s("flex-1 bg-cream")}>
       <StatusBar style="dark" />
-      <View style={s("flex-1 px-5 py-6")}>
+      <View style={[...s("flex-1 px-5 py-6"), { paddingBottom: Math.max(insets.bottom, 12) + 72 }]}>
         <View style={s("mb-5 flex-row items-center justify-between")}>
           <View>
             <Text style={s("text-xs font-semibold uppercase tracking-[3px] text-rain")}>
@@ -140,7 +141,73 @@ export default function App() {
           {step === "success" ? <SuccessCard onReset={() => setStep("silent")} /> : null}
         </View>
       </View>
+      <BottomMenu
+        activeStep={step}
+        bottomInset={insets.bottom}
+        onHome={() => setStep("silent")}
+        onOffer={() => setStep("surface")}
+        onProof={() => setStep("success")}
+        onQr={() => setStep("redeem")}
+      />
     </SafeAreaView>
+  );
+}
+
+function BottomMenu({
+  activeStep,
+  bottomInset,
+  onHome,
+  onOffer,
+  onProof,
+  onQr,
+}: {
+  activeStep: DemoStep;
+  bottomInset: number;
+  onHome: () => void;
+  onOffer: () => void;
+  onProof: () => void;
+  onQr: () => void;
+}) {
+  return (
+    <View pointerEvents="box-none" style={{ bottom: 0, left: 0, position: "absolute", right: 0 }}>
+      <View
+        style={{
+          backgroundColor: "rgba(255, 248, 238, 0.94)",
+          borderTopColor: "rgba(23, 18, 15, 0.12)",
+          borderTopWidth: 1,
+          flexDirection: "row",
+          paddingBottom: Math.max(bottomInset, 8),
+          paddingHorizontal: 18,
+          paddingTop: 8,
+        }}
+      >
+        <BottomMenuItem active={activeStep === "silent"} icon="⌂" label="Home" onPress={onHome} />
+        <BottomMenuItem active={activeStep === "surface"} icon="✦" label="Offer" onPress={onOffer} />
+        <BottomMenuItem active={activeStep === "redeem"} icon="▣" label="QR" onPress={onQr} />
+        <BottomMenuItem active={activeStep === "success"} icon="✓" label="Proof" onPress={onProof} />
+      </View>
+    </View>
+  );
+}
+
+function BottomMenuItem({
+  active,
+  icon,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  icon: string;
+  label: string;
+  onPress: () => void;
+}) {
+  const color = active ? "#f2542d" : "rgba(23, 18, 15, 0.48)";
+
+  return (
+    <Pressable onPress={onPress} style={{ alignItems: "center", flex: 1, paddingVertical: 6 }}>
+      <Text style={{ color, fontSize: 17, fontWeight: "900" }}>{icon}</Text>
+      <Text style={{ color, fontSize: 10, fontWeight: "900", marginTop: 3 }}>{label}</Text>
+    </Pressable>
   );
 }
 
