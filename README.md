@@ -1,3 +1,21 @@
+<div align="center">
+
+# MomentMarkt
+
+**The marketing department small merchants don't have, generated for the moment, redeemed through the rail the bank already operates.**
+
+[![Track: DSV-Gruppe CITY WALLET](https://img.shields.io/badge/track-DSV--Gruppe%20CITY%20WALLET-e63946)](https://www.dsv-gruppe.de/)
+[![Hack-Nation 2026](https://img.shields.io/badge/hackathon-Hack--Nation%202026-1d3557)](https://hack-nation.ai)
+[![License: MIT](https://img.shields.io/badge/license-MIT-success)](./LICENSE)
+[![Mobile: Expo + RN](https://img.shields.io/badge/mobile-Expo%20%2B%20React%20Native-0a7e8c)](./apps/mobile)
+[![Backend: FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)](./apps/backend)
+
+[**Submission**](./work/SUBMISSION.md) · [**Architecture**](./assets/architecture-slide.md) · [**Spec**](./work/SPEC.md) · [**Cover image**](./assets/cover.html)
+
+</div>
+
+---
+
 # MomentMarkt
 
 Generative city wallet prototype for the DSV-Gruppe CITY WALLET challenge.
