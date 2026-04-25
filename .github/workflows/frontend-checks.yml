@@ -1,0 +1,46 @@
+name: Frontend checks
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "apps/merchant/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/frontend-checks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - "apps/merchant/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/frontend-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  frontend-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck mobile app
+        run: pnpm mobile:typecheck
+
+      - name: Typecheck merchant inbox
+        run: pnpm merchant:typecheck
+
+      - name: Build merchant inbox
+        run: pnpm merchant:build

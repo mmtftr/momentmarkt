@@ -1,0 +1,22 @@
+appId: com.momentmarkt.mobile
+---
+- launchApp
+- assertVisible: "MomentMarkt"
+- tapOn:
+    text: "Offer"
+    optional: true
+- assertVisible:
+    text: "Cafe Bondi|Café Bondi|Kakao|cocoa|cashback"
+    optional: true
+- tapOn:
+    text: "Redeem|QR|girocard|Claim"
+    optional: true
+- assertVisible:
+    text: "QR|Simulated checkout|Token"
+    optional: true
+- tapOn:
+    text: "Tap girocard|Simulate girocard tap"
+    optional: true
+- assertVisible:
+    text: "Cashback|credited|confirmed|gutgeschrieben"
+    optional: true
