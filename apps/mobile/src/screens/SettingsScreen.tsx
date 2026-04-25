@@ -1,3 +1,4 @@
+import { SymbolView } from "expo-symbols";
 import {
   type ComponentProps,
   type ReactElement,
@@ -152,9 +153,13 @@ export function SettingsScreen(props: Props): ReactElement | null {
             },
           ]}
         >
-          <Text style={[...s("text-base font-black text-ink"), { lineHeight: 18 }]}>
-            ✕
-          </Text>
+          <SymbolView
+            name="xmark"
+            tintColor="#17120f"
+            size={14}
+            weight="medium"
+            style={{ width: 14, height: 14 }}
+          />
         </Pressable>
       </View>
 
@@ -308,7 +313,13 @@ export function SettingsScreen(props: Props): ReactElement | null {
             <Text style={s("text-base font-bold text-ink")}>
               Reset demo
             </Text>
-            <Text style={[...s("text-base text-spark"), { lineHeight: 18 }]}>↺</Text>
+            <SymbolView
+              name="arrow.counterclockwise"
+              tintColor="#f2542d"
+              size={16}
+              weight="medium"
+              style={{ width: 18, height: 18 }}
+            />
           </Pressable>
         </View>
         <SectionFooter>
@@ -414,9 +425,13 @@ function ActionRow({ label, onPress }: { label: string; onPress?: () => void }) 
       ]}
     >
       <Text style={s("text-base text-ink")}>{label}</Text>
-      <Text style={[...s("text-base"), { color: "rgba(23, 18, 15, 0.3)", lineHeight: 18 }]}>
-        ›
-      </Text>
+      <SymbolView
+        name="chevron.right"
+        tintColor="rgba(23, 18, 15, 0.3)"
+        size={14}
+        weight="medium"
+        style={{ width: 14, height: 14 }}
+      />
     </Pressable>
   );
 }

@@ -1,3 +1,4 @@
+import { SymbolView } from "expo-symbols";
 import { useMemo, useState } from "react";
 import {
   Image,
@@ -169,7 +170,13 @@ export function HistoryScreen({
   if (redemptions.length === 0) {
     return (
       <View style={s("flex-1 bg-cream items-center justify-center px-5")}>
-        <Text style={[{ fontSize: 60 }]}>🪙</Text>
+        <SymbolView
+          name="wallet.pass.fill"
+          tintColor="#6f3f2c"
+          size={60}
+          weight="medium"
+          style={{ width: 64, height: 64 }}
+        />
         <Text style={[...s("mt-4 text-ink"), { fontSize: 18, fontWeight: "800" }]}>
           No cashbacks yet. Get out there!
         </Text>

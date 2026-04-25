@@ -1,3 +1,4 @@
+import { SymbolView } from "expo-symbols";
 import { type ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -81,14 +82,28 @@ export function MapTopChip({
           },
         ]}
       >
+        <SymbolView
+          name="mappin.and.ellipse"
+          tintColor="#17120f"
+          size={13}
+          weight="medium"
+          style={{ width: 16, height: 16, marginRight: 4 }}
+        />
         <Text style={[...s("text-[13px] text-ink"), { fontWeight: "500" }]} numberOfLines={1}>
-          {"📍 "}
           <Text style={[...s("text-[13px] text-ink"), { fontWeight: "700" }]}>
             {city}
           </Text>
           {area ? ` ${area}` : ""}
           {"  ·  "}
-          {"☔ "}
+        </Text>
+        <SymbolView
+          name="cloud.rain.fill"
+          tintColor="#17120f"
+          size={13}
+          weight="medium"
+          style={{ width: 16, height: 16, marginRight: 4 }}
+        />
+        <Text style={[...s("text-[13px] text-ink"), { fontWeight: "500" }]} numberOfLines={1}>
           {Math.round(tempC)}
           {"° "}
           {weatherSummary}
