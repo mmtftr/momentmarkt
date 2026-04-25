@@ -22,7 +22,11 @@ logfire.configure(
     service_version="0.1.0",
     send_to_logfire="if-token-present",
 )
-logfire.instrument_pydantic_ai()
+try:
+    logfire.instrument_pydantic_ai()
+except ModuleNotFoundError as exc:
+    if exc.name != "pydantic_ai":
+        raise
 
 
 app = FastAPI(
