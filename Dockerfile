@@ -17,6 +17,6 @@ COPY cities /app/cities
 
 RUN uv sync --frozen --extra llm
 
-EXPOSE 8000
-# Honour $PORT so the same image runs on Fly (8000) and HF Spaces (7860).
-CMD exec uv run --no-sync uvicorn momentmarkt_backend.main:app --host 0.0.0.0 --port ${PORT:-8000}
+EXPOSE 7860
+# HF Spaces require port 7860 by default. Fly sets PORT=8000 via fly.toml.
+CMD exec uv run --no-sync uvicorn momentmarkt_backend.main:app --host 0.0.0.0 --port ${PORT:-7860}
