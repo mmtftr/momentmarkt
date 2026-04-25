@@ -46,7 +46,7 @@
 2. Phase 1: Expo baseline and recordable fallback flow.
 3. Phase 1: `data/transactions/berlin-density.json` for 4 merchants.
 4. Phase 2: GenUI JSON schema and RN primitive renderer.
-5. Phase 2: live LLM generation through LiteLLM/Azure.
+5. Phase 2: live LLM generation through Pydantic AI / Azure OpenAI (`gpt-5.5`, provider dispatched via `MOMENTMARKT_LLM_PROVIDER=azure`).
 6. Phase 3: signals, surfacing score, high-intent toggle, merchant inbox, redeem loop.
 7. Phase 4: Zurich config swap only if core demo is stable.
 8. Phase 5/6: architecture slide, videos, README, Devpost.
@@ -56,6 +56,7 @@
 - Demo surface: in-app card. Production story: push notification server via Expo Push/FCM/APNs.
 - Demo SLM: server-side or simulated. Production story: on-device Phi-3/Gemma.
 - Demo Payone: synthetic transaction-density JSON. Production story: real Payone/Sparkassen aggregated density.
+- Demo LLM: Pydantic AI → Azure OpenAI (`gpt-5.5`) for offer drafting + headline rewrite, with fixture fallback. Production story: same Pydantic AI surface, swappable provider, paired with the on-device SLM extractor for `intent_token`.
 - Privacy token visible in dev panel: `{intent_token, h3_cell_r8}`.
 
 ## Secrets And Safety
