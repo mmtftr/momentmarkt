@@ -38,3 +38,5 @@ Format: `[stage] [round] [agent] [wall_s] [notes]`
 - stage=02 (cycle 2 refine) plan-r3 (claude opus-4-7) launched — refine to spec-v03 with partner discussion as mandatory override
 - stage=02 plan-r3 done → wrote work/SPEC.md (spec-v03, 81 lines, STATUS: ready)
 - stage=03 pkg-r2 (claude opus-4-7) launched against spec-v03
+- stage=03 pkg-r2 done → wrote work/SUBMISSION.md (submission-v02, 156 lines, STATUS: blocked — pending repo/videos as expected pre-build)
+- pipeline pause point: spec-v03 + submission-v02 ready; user pending git push
