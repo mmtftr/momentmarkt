@@ -262,10 +262,16 @@ export function HistoryScreen({
             <View style={[{ flexDirection: "row", alignItems: "center", marginTop: 20 }]}>
               <View
                 style={[
-                  ...s("rounded-full px-3 py-1"),
-                  { backgroundColor: "rgba(242, 84, 45, 0.12)" },
+                  ...s("flex-row items-center rounded-full px-3 py-1"),
+                  { backgroundColor: "rgba(242, 84, 45, 0.12)", gap: 4 },
                 ]}
               >
+                <SymbolView
+                  name="trophy.fill"
+                  size={12}
+                  tintColor="#f2542d"
+                  weight="medium"
+                />
                 <Text
                   style={s(
                     "text-[11px] font-bold uppercase tracking-[1px] text-spark",
@@ -368,14 +374,18 @@ function RedemptionRow({ redemption }: { redemption: Redemption }) {
         <Text style={[...s("text-spark"), { fontSize: 16, fontWeight: "700" }]}>
           +€{formatEuro(redemption.cashback)}
         </Text>
-        <Text
-          style={[
-            ...s("text-neutral-600"),
-            { fontSize: 11, marginTop: 2 },
-          ]}
-        >
-          {redemption.date}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+          <SymbolView
+            name="clock"
+            size={11}
+            tintColor="#737373"
+            weight="medium"
+            style={{ marginRight: 3 }}
+          />
+          <Text style={[...s("text-neutral-600"), { fontSize: 11 }]}>
+            {redemption.date}
+          </Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
