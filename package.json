@@ -13,5 +13,10 @@
     "mobile:android": "pnpm --dir apps/mobile android",
     "mobile:web": "pnpm --dir apps/mobile web",
     "mobile:typecheck": "pnpm --dir apps/mobile typecheck"
+  },
+  "pnpm": {
+    "overrides": {
+      "react-native-worklets": "0.7.4"
+    }
   }
 }
