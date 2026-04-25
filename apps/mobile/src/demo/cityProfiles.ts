@@ -48,10 +48,17 @@ export const cityProfiles: Record<DemoCityId, DemoCityProfile> = {
     },
     mapCenter: { lat: 52.5219, lng: 13.4132 },
     mapPins: [
-      { id: "cafe-bondi", name: "Cafe Bondi", lat: 52.521, lng: 13.413, highlighted: true },
-      { id: "backerei-mitte", name: "Backerei Mitte", lat: 52.5225, lng: 13.4108 },
-      { id: "buchladen-rosa", name: "Buchladen Rosa", lat: 52.5198, lng: 13.4155 },
-      { id: "kiosk-ecke", name: "Kiosk Ecke", lat: 52.5232, lng: 13.4147 },
+      {
+        id: "cafe-bondi",
+        name: "Cafe Bondi",
+        lat: 52.521,
+        lng: 13.413,
+        highlighted: true,
+        category: "cafe",
+      },
+      { id: "backerei-mitte", name: "Backerei Mitte", lat: 52.5225, lng: 13.4108, category: "bakery" },
+      { id: "buchladen-rosa", name: "Buchladen Rosa", lat: 52.5198, lng: 13.4155, category: "bookstore" },
+      { id: "kiosk-ecke", name: "Kiosk Ecke", lat: 52.5232, lng: 13.4147, category: "kiosk" },
     ],
   },
   zurich: {
@@ -78,10 +85,17 @@ export const cityProfiles: Record<DemoCityId, DemoCityProfile> = {
     },
     mapCenter: { lat: 47.378, lng: 8.5403 },
     mapPins: [
-      { id: "kafi-viadukt", name: "Kafi Viadukt", lat: 47.3785, lng: 8.5398, highlighted: true },
-      { id: "baeckerei-hb", name: "Baeckerei HB", lat: 47.3772, lng: 8.5411 },
-      { id: "buchhandlung-orell", name: "Buchhandlung Orell", lat: 47.3791, lng: 8.5418 },
-      { id: "kiosk-bahnhof", name: "Kiosk Bahnhof", lat: 47.3776, lng: 8.5392 },
+      {
+        id: "kafi-viadukt",
+        name: "Kafi Viadukt",
+        lat: 47.3785,
+        lng: 8.5398,
+        highlighted: true,
+        category: "cafe",
+      },
+      { id: "baeckerei-hb", name: "Baeckerei HB", lat: 47.3772, lng: 8.5411, category: "bakery" },
+      { id: "buchhandlung-orell", name: "Buchhandlung Orell", lat: 47.3791, lng: 8.5418, category: "bookstore" },
+      { id: "kiosk-bahnhof", name: "Kiosk Bahnhof", lat: 47.3776, lng: 8.5392, category: "kiosk" },
     ],
   },
 };

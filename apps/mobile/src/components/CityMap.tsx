@@ -1,6 +1,12 @@
 import type { JSX } from "react";
 import { useEffect } from "react";
-import { type StyleProp, View, type ViewStyle } from "react-native";
+import {
+  type StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import Animated, {
   Easing,
@@ -12,12 +18,26 @@ import Animated, {
 
 import { s } from "../styles";
 
+export type MerchantCategory =
+  | "cafe"
+  | "bakery"
+  | "bookstore"
+  | "fitness"
+  | "kiosk"
+  | "supermarket"
+  | "default";
+
 export type CityMapPin = {
   id: string;
   name: string;
   lat: number;
   lng: number;
   highlighted?: boolean;
+  /**
+   * Merchant category — drives the marker glyph. Defaults to a generic
+   * pin when missing so the component never blows up on legacy data.
+   */
+  category?: MerchantCategory;
 };
 
 type Props = {
@@ -42,16 +62,36 @@ type Props = {
 // Mirrors `colors.spark` so the highlighted pin reads as MomentMarkt-red.
 const SPARK_RED = "#f2542d";
 
+// Category → emoji glyph used inside the marker bubble. Keep this list in
+// sync with `MerchantCategory`. Anything missing falls back to the
+// generic pin so a future category never crashes the marker view.
+const CATEGORY_GLYPH: Record<MerchantCategory, string> = {
+  cafe: "☕",
+  bakery: "🥨",
+  bookstore: "📚",
+  fitness: "🏃",
+  kiosk: "📰",
+  supermarket: "🛒",
+  default: "📍",
+};
+
 // Berlin Mitte fallback pin set: one highlighted Cafe Bondi plus a few
 // muted partner pins so the map has a visible city texture even when the
 // caller forgets to pass `pins`. Coords are rounded plausibles around
 // the Mitte center (52.5219, 13.4132).
 const DEFAULT_BERLIN_PINS: CityMapPin[] = [
-  { id: "cafe-bondi", name: "Cafe Bondi", lat: 52.521, lng: 13.413, highlighted: true },
-  { id: "backerei-mitte", name: "Backerei Mitte", lat: 52.5225, lng: 13.4108 },
-  { id: "buchladen-rosa", name: "Buchladen Rosa", lat: 52.5198, lng: 13.4155 },
-  { id: "kiosk-ecke", name: "Kiosk Ecke", lat: 52.5232, lng: 13.4147 },
-  { id: "eisdiele-spree", name: "Eisdiele Spree", lat: 52.5202, lng: 13.4118 },
+  {
+    id: "cafe-bondi",
+    name: "Cafe Bondi",
+    lat: 52.521,
+    lng: 13.413,
+    highlighted: true,
+    category: "cafe",
+  },
+  { id: "backerei-mitte", name: "Backerei Mitte", lat: 52.5225, lng: 13.4108, category: "bakery" },
+  { id: "buchladen-rosa", name: "Buchladen Rosa", lat: 52.5198, lng: 13.4155, category: "bookstore" },
+  { id: "kiosk-ecke", name: "Kiosk Ecke", lat: 52.5232, lng: 13.4147, category: "kiosk" },
+  { id: "eisdiele-spree", name: "Eisdiele Spree", lat: 52.5202, lng: 13.4118, category: "default" },
 ];
 
 /**
@@ -110,41 +150,59 @@ export function CityMap({
         showsMyLocationButton={false}
         toolbarEnabled={false}
       >
-        {resolvedPins.map((pin) =>
-          pin.highlighted ? (
-            <Marker
-              key={pin.id}
-              coordinate={{ latitude: pin.lat, longitude: pin.lng }}
-              title={pin.name}
-              anchor={{ x: 0.5, y: 0.5 }}
-              // Halo animation requires React-side redraws — let the
-              // marker view track changes here so the pulse animates.
-              tracksViewChanges
-            >
-              <PulsingMarker />
-            </Marker>
-          ) : (
-            <Marker
-              key={pin.id}
-              coordinate={{ latitude: pin.lat, longitude: pin.lng }}
-              title={pin.name}
-              opacity={0.55}
-              tracksViewChanges={false}
-            />
-          ),
-        )}
+        {resolvedPins.map((pin) => (
+          <MerchantMarker key={pin.id} pin={pin} />
+        ))}
       </MapView>
     </View>
   );
 }
 
 /**
- * Custom marker view used for highlighted pins: a solid dot with a
- * pulsing halo ring (scale 1 → 1.5 → 1, opacity 0.7 → 0 → 0.7) on a
- * 1.2s ease-in-out loop. Non-highlighted pins keep the system marker
- * for a cleaner, less busy map.
+ * Branded merchant marker — replaces the generic red MapKit pin with a
+ * white circle holding the merchant's category glyph. Highlighted pins
+ * (e.g. Cafe Bondi) get a larger spark-red bubble plus the pulsing halo
+ * preserved from #31 so they read as the wallet's hero suggestion.
+ *
+ * Pattern aligns with Apple Maps + Yelp-style category chips: small
+ * round bubbles + emoji are immediately scannable on top of street
+ * tiles, while the halo + color shift directs the eye to the offer.
  */
-function PulsingMarker() {
+function MerchantMarker({ pin }: { pin: CityMapPin }): JSX.Element {
+  const isHighlighted = Boolean(pin.highlighted);
+  const glyph = CATEGORY_GLYPH[pin.category ?? "default"] ?? CATEGORY_GLYPH.default;
+
+  return (
+    <Marker
+      coordinate={{ latitude: pin.lat, longitude: pin.lng }}
+      title={pin.name}
+      anchor={{ x: 0.5, y: 0.5 }}
+      // Halo animation requires React-side redraws — let the highlighted
+      // marker view track changes so the pulse animates. Static markers
+      // skip this for perf.
+      tracksViewChanges={isHighlighted}
+      opacity={isHighlighted ? 1 : 0.92}
+    >
+      {isHighlighted ? (
+        <HighlightedMerchantMarker glyph={glyph} />
+      ) : (
+        <View style={markerStyles.bubbleWrap}>
+          <View style={markerStyles.normal}>
+            <Text style={markerStyles.normalGlyph}>{glyph}</Text>
+          </View>
+        </View>
+      )}
+    </Marker>
+  );
+}
+
+/**
+ * Highlighted variant: spark-red circle + white border + pulsing halo
+ * (scale 1 → 1.5, opacity 0.7 → 0) on a 1.2s ease-in-out loop. This is
+ * the #31 motion preserved verbatim, just wrapped around the new
+ * branded bubble instead of the bare dot.
+ */
+function HighlightedMerchantMarker({ glyph }: { glyph: string }): JSX.Element {
   const pulse = useSharedValue(0);
 
   useEffect(() => {
@@ -165,37 +223,78 @@ function PulsingMarker() {
   });
 
   return (
-    <View
-      style={{
-        alignItems: "center",
-        justifyContent: "center",
-        height: 40,
-        width: 40,
-      }}
-    >
+    <View style={markerStyles.highlightedWrap}>
       <Animated.View
         pointerEvents="none"
-        style={[
-          {
-            position: "absolute",
-            height: 32,
-            width: 32,
-            borderRadius: 16,
-            backgroundColor: SPARK_RED,
-          },
-          haloStyle,
-        ]}
+        style={[markerStyles.halo, haloStyle]}
       />
-      <View
-        style={{
-          height: 14,
-          width: 14,
-          borderRadius: 7,
-          backgroundColor: SPARK_RED,
-          borderColor: "#fff8ee",
-          borderWidth: 2,
-        }}
-      />
+      <View style={markerStyles.highlighted}>
+        <Text style={markerStyles.highlightedGlyph}>{glyph}</Text>
+      </View>
     </View>
   );
 }
+
+// Marker chrome lives in StyleSheet (not the `s()` helper) because the
+// shadow + border tokens here aren't in the Tailwind-ish palette and
+// the values are static. Per CityMap convention, only the outer wrapper
+// uses `s()` — marker internals stay co-located for readability.
+const markerStyles = StyleSheet.create({
+  bubbleWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 40,
+    width: 40,
+  },
+  normal: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 0.5,
+    borderColor: "#17120f",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1.5 },
+    elevation: 2,
+  },
+  normalGlyph: {
+    fontSize: 14,
+    lineHeight: 16,
+  },
+  highlightedWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 64,
+    width: 64,
+  },
+  halo: {
+    position: "absolute",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: SPARK_RED,
+  },
+  highlighted: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: SPARK_RED,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
+  highlightedGlyph: {
+    fontSize: 20,
+    lineHeight: 22,
+  },
+});
