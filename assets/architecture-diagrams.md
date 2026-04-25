@@ -149,6 +149,119 @@ wrapper are identical across both columns.
 
 ---
 
+## 4. GenUI Pipeline — LLM Output → React Native UI
+
+How the Opportunity Agent's JSON layout spec becomes a live React Native
+widget. The LLM emits a validated JSON tree; the schema coercer sanitises
+it; the `WidgetRenderer` recurses over 6 primitives to produce real RN views.
+If any step fails the fallback widget renders instead — demo is always safe.
+
+```mermaid
+flowchart LR
+  LLM["LLM\n(Azure OpenAI\nvia LiteLLM)"]
+
+  subgraph CONTRACT["widget_spec contract"]
+    direction TB
+    JSON["JSON tree\n{ type, children,\n  text, uri, action }"]
+    SCHEMA["Schema validator\n(widgetSchema.ts)\ndepth ≤ 12\naction = 'redeem' only"]
+    FALLBACK["Known-good fallback\nwidget if invalid"]
+    JSON --> SCHEMA
+    SCHEMA -- "valid" --> RENDER
+    SCHEMA -- "invalid" --> FALLBACK
+    FALLBACK --> RENDER
+  end
+
+  subgraph RENDER["WidgetRenderer (React Native)"]
+    direction TB
+    VIEW["View\n(container)"]
+    SCROLL["ScrollView\n(scrollable)"]
+    TEXT["Text\n(+ NativeWind class)"]
+    IMG["Image\n(remote URI)"]
+    PRESS["Pressable\n(action=redeem)"]
+  end
+
+  subgraph OUTPUT["Live UI on device"]
+    RAIN["rainHero\n(image-bleed hero,\nrain mood)"]
+    QUIET["quietStack\n(vertical stack,\nlow-demand)"]
+    EVENT["preEventTicket\n(event frame)"]
+  end
+
+  LLM -- "emits" --> JSON
+  RENDER --> OUTPUT
+
+  classDef llm fill:#ffe8e8,stroke:#dc2626,color:#7f1d1d;
+  classDef contract fill:#fff7e6,stroke:#d39a00,color:#5a3a00;
+  classDef prim fill:#eef6ff,stroke:#3a7bd5,color:#0b3d91;
+  classDef out fill:#e8fff1,stroke:#16a34a,color:#064e3b;
+
+  class LLM llm;
+  class JSON,SCHEMA,FALLBACK contract;
+  class VIEW,SCROLL,TEXT,IMG,PRESS prim;
+  class RAIN,QUIET,EVENT out;
+```
+
+**Key point for the demo:** The LLM never emits free-form JSX — it emits a
+constrained JSON tree. The schema validator and fallback render mean the demo
+is safe even if the LLM produces unexpected output.
+
+---
+
+## 5. Surfacing Score Breakdown
+
+How the Surfacing Agent computes the final score and decides whether to fire.
+All arithmetic is deterministic Python — no LLM involved at this stage.
+
+```mermaid
+flowchart TD
+  subgraph INPUT["Input signals"]
+    W["weather_trigger\nrain_incoming → +0.28\nclear → 0"]
+    EV["event_ending_soon\ntrue → +0.08"]
+    DG["demand_gap_ratio\n× 0.7, capped 0.42"]
+    PR["distance_m\n≤100 m → +0.20\n≤250 m → +0.12\n>250 m → +0.04"]
+    HI["high_intent_boost\ntrue → +0.16"]
+  end
+
+  SUM["base_score =\nweather + event +\ndemand + proximity"]
+  FINAL["final_score =\nbase_score + high_intent_boost"]
+
+  subgraph THRESHOLD["Silence threshold"]
+    TH_S["THETA_SILENT = 0.72\n(default — most users)"]
+    TH_A["THETA_ACTIVE = 0.58\n(high-intent users)"]
+  end
+
+  GATE{"final_score\n≥ threshold?"}
+  FIRE["FIRE\n→ LLM rewrites headline\n→ in-app card slides in"]
+  SILENT["SILENT\n→ nothing shown\n(log decision only)"]
+
+  W & EV & DG & PR --> SUM
+  SUM --> FINAL
+  HI --> FINAL
+  HI -- "selects" --> TH_A
+  FINAL --> GATE
+  TH_S --> GATE
+  TH_A --> GATE
+  GATE -- "yes" --> FIRE
+  GATE -- "no" --> SILENT
+
+  classDef input fill:#eef6ff,stroke:#3a7bd5,color:#0b3d91;
+  classDef calc fill:#fff7e6,stroke:#d39a00,color:#5a3a00;
+  classDef fire fill:#e8fff1,stroke:#16a34a,color:#064e3b;
+  classDef silent fill:#f5f5f5,stroke:#aaa,color:#444;
+  classDef gate fill:#ffe8e8,stroke:#dc2626,color:#7f1d1d;
+
+  class W,EV,DG,PR,HI input;
+  class SUM,FINAL,TH_S,TH_A calc;
+  class FIRE fire;
+  class SILENT silent;
+  class GATE gate;
+```
+
+**Demo values (Berlin, high-intent ON):**
+`0.28 + 0.08 + 0.38 + 0.20 + 0.16 = 0.76` — fires against threshold `0.58`.
+Toggle high-intent OFF: score drops to `0.60`, threshold rises to `0.72` → silent.
+
+---
+
 ## See also
 
 - [`assets/architecture-slide.md`](./architecture-slide.md) — slide source for the tech video
