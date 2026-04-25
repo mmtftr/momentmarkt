@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import logfire
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -13,11 +14,24 @@ from .storage import DemoStore
 from .surfacing_agent import evaluate_surface
 
 
+# `if-token-present` makes Logfire a no-op when LOGFIRE_TOKEN is missing,
+# so local dev, tests, and CI don't try to ship spans. HF Spaces sets the
+# token as a secret to enable production tracing.
+logfire.configure(
+    service_name="momentmarkt-backend",
+    service_version="0.1.0",
+    send_to_logfire="if-token-present",
+)
+logfire.instrument_pydantic_ai()
+
+
 app = FastAPI(
     title="MomentMarkt Backend",
     version="0.1.0",
     description="Fixture-backed signal and Opportunity Agent API for the CITY WALLET demo.",
 )
+
+logfire.instrument_fastapi(app, capture_headers=False)
 
 # Demo backend serves fixture data only; permissive CORS lets the merchant
 # inbox and any teammate's local client hit the hosted URL without friction.
@@ -127,49 +141,56 @@ async def opportunity_generate(request: OpportunityRequest) -> dict[str, Any]:
 
 @app.post("/opportunity/batch")
 async def opportunity_batch(request: OpportunityBatchRequest) -> dict[str, Any]:
-    try:
-        contexts = build_all_signal_contexts(city=request.city)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"Unknown city: {request.city}") from exc
+    with logfire.span(
+        "opportunity_batch {city}",
+        city=request.city,
+        use_llm=request.use_llm,
+    ) as span:
+        try:
+            contexts = build_all_signal_contexts(city=request.city)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Unknown city: {request.city}") from exc
 
-    drafted: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-    for context in contexts:
-        merchant_id = context["merchant"]["id"]
-        trigger_evaluation = context["trigger_evaluation"]
-        if not trigger_evaluation["fired"]:
-            skipped.append(
-                {
-                    "merchant_id": merchant_id,
-                    "reason": "no_opportunity_trigger_fired",
-                    "trigger_evaluation": trigger_evaluation,
-                }
+        drafted: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        for context in contexts:
+            merchant_id = context["merchant"]["id"]
+            trigger_evaluation = context["trigger_evaluation"]
+            if not trigger_evaluation["fired"]:
+                skipped.append(
+                    {
+                        "merchant_id": merchant_id,
+                        "reason": "no_opportunity_trigger_fired",
+                        "trigger_evaluation": trigger_evaluation,
+                    }
+                )
+                continue
+            result = await _draft_and_maybe_persist(
+                context=context,
+                high_intent=False,
+                use_llm=request.use_llm,
+                suppress_rejected=request.suppress_rejected,
             )
-            continue
-        result = await _draft_and_maybe_persist(
-            context=context,
-            high_intent=False,
-            use_llm=request.use_llm,
-            suppress_rejected=request.suppress_rejected,
-        )
-        if result.get("suppressed"):
-            skipped.append(
-                {
-                    "merchant_id": merchant_id,
-                    "reason": result["suppression_reason"],
-                    "trigger_evaluation": trigger_evaluation,
-                }
-            )
-            continue
-        drafted.append(result["persisted_offer"])
+            if result.get("suppressed"):
+                skipped.append(
+                    {
+                        "merchant_id": merchant_id,
+                        "reason": result["suppression_reason"],
+                        "trigger_evaluation": trigger_evaluation,
+                    }
+                )
+                continue
+            drafted.append(result["persisted_offer"])
 
-    return {
-        "city": request.city,
-        "drafted_count": len(drafted),
-        "skipped_count": len(skipped),
-        "drafted": drafted,
-        "skipped": skipped,
-    }
+        span.set_attribute("drafted_count", len(drafted))
+        span.set_attribute("skipped_count", len(skipped))
+        return {
+            "city": request.city,
+            "drafted_count": len(drafted),
+            "skipped_count": len(skipped),
+            "drafted": drafted,
+            "skipped": skipped,
+        }
 
 
 @app.post("/surfacing/evaluate")
