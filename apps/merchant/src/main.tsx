@@ -29,6 +29,34 @@ const fallbackAccepted = merchant.inventory_goal.target_redemptions;
 const fallbackRedeemed = Math.min(7, fallbackAccepted);
 const fallbackSpentBudget = fallbackRedeemed * cashbackPerRedeem;
 const fallbackTotalBudget = merchant.offer_budget.total_budget_eur;
+const curveMaxDensity = 100;
+
+function shortTime(timeOrDate: string) {
+  return timeOrDate.includes("T")
+    ? timeOrDate.slice(11, 16)
+    : timeOrDate;
+}
+
+function curvePoints(points: Array<{ density: number }>, width = 760, height = 220) {
+  if (points.length <= 1) return "";
+  return points
+    .map((point, index) => {
+      const x = (index / (points.length - 1)) * width;
+      const y = height - (point.density / curveMaxDensity) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+function gapPosition(width = 760, height = 220) {
+  const typicalIndex = merchant.typical_density_curve.points.findIndex(
+    (point) => point.time === "13:30",
+  );
+  const x = (typicalIndex / (merchant.typical_density_curve.points.length - 1)) * width;
+  const typicalY = height - (merchant.demand_gap.typical_density / curveMaxDensity) * height;
+  const liveY = height - (merchant.demand_gap.live_density / curveMaxDensity) * height;
+  return { x, typicalY, liveY };
+}
 
 type MerchantStats = {
   merchant_id: string;
@@ -111,6 +139,8 @@ function App() {
           <span className="pulse" /> {stats ? "Live" : "Auto-approved 3h ago"}
         </div>
       </section>
+
+      <DemandGapHero />
 
       <section className="summary-grid" aria-label="Campaign summary">
         <Metric label="Surfaced" value={surfaced.toString()} detail="nearby high-intent wallets" />
@@ -202,6 +232,63 @@ function App() {
         </div>
       </section>
     </main>
+  );
+}
+
+function DemandGapHero() {
+  const width = 760;
+  const height = 220;
+  const gap = gapPosition(width, height);
+  const typicalPoints = curvePoints(merchant.typical_density_curve.points, width, height);
+  const livePoints = curvePoints(merchant.live_samples, width, height);
+
+  return (
+    <section className="demand-hero" aria-label="Demand gap chart">
+      <div className="demand-copy">
+        <span className="eyebrow">Payone-style live density</span>
+        <h2>Bondi is quiet exactly when Mia walks by.</h2>
+        <p>
+          Typical Saturday lunch traffic should be at {merchant.demand_gap.typical_density}.
+          Live density is {merchant.demand_gap.live_density}, a {percent(merchant.demand_gap.gap_ratio)} gap.
+          That gap is what turns the merchant rule into the mobile offer.
+        </p>
+      </div>
+      <div className="curve-card">
+        <div className="curve-topline">
+          <div>
+            <span className="label">Current gap</span>
+            <strong>{merchant.demand_gap.gap_density_points} pts below baseline</strong>
+          </div>
+          <div className="legend">
+            <span className="legend-item legend-typical">Typical</span>
+            <span className="legend-item legend-live">Live</span>
+          </div>
+        </div>
+        <svg className="curve-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Typical versus live density curve">
+          <defs>
+            <linearGradient id="gapFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#f2542d" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#f2542d" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+          <g className="curve-grid">
+            {[0.25, 0.5, 0.75].map((row) => (
+              <line key={row} x1="0" x2={width} y1={height * row} y2={height * row} />
+            ))}
+          </g>
+          <polyline className="curve-line curve-line-typical" points={typicalPoints} />
+          <polyline className="curve-line curve-line-live" points={livePoints} />
+          <line className="gap-line" x1={gap.x} x2={gap.x} y1={gap.typicalY} y2={gap.liveY} />
+          <circle className="gap-dot gap-dot-typical" cx={gap.x} cy={gap.typicalY} r="7" />
+          <circle className="gap-dot gap-dot-live" cx={gap.x} cy={gap.liveY} r="8" />
+        </svg>
+        <div className="curve-axis">
+          {merchant.typical_density_curve.points.map((point) => (
+            <span key={point.time}>{shortTime(point.time)}</span>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
