@@ -42,17 +42,42 @@ uv run --project apps/backend --extra dev pytest
 ## Optional LLM Path
 
 The endpoint is fixture-first by default. To try live generation through
-Pydantic AI, install the optional extra and pass `use_llm: true`:
+Pydantic AI, install the optional extra and pass `use_llm: true`. The model
+selector dispatches on `MOMENTMARKT_LLM_PROVIDER`:
+
+### Azure OpenAI (production deployment uses this)
+
+```bash
+MOMENTMARKT_LLM_PROVIDER=azure \
+MOMENTMARKT_LLM_MODEL=gpt-5.5 \
+AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/ \
+AZURE_OPENAI_API_KEY=<key> \
+uv run --project apps/backend --extra llm uvicorn momentmarkt_backend.main:app --reload
+```
+
+The deployed HF Space runs against the Azure `rapidata-hackathon-resource`
+endpoint with `gpt-5.5`.
+
+### OpenRouter
+
+```bash
+MOMENTMARKT_LLM_PROVIDER=openrouter \
+MOMENTMARKT_LLM_MODEL=openai/gpt-5.2 \
+OPENROUTER_API_KEY=<key> \
+uv run --project apps/backend --extra llm uvicorn momentmarkt_backend.main:app --reload
+```
+
+### Direct provider string (no `MOMENTMARKT_LLM_PROVIDER`)
 
 ```bash
 MOMENTMARKT_PYDANTIC_AI_MODEL=openai:gpt-5.2 \
 uv run --project apps/backend --extra llm uvicorn momentmarkt_backend.main:app --reload
 ```
 
-Pydantic AI model strings need a provider prefix, such as `openai:gpt-5.2`.
-Provider SDKs read their usual environment variables. If anything fails, the
-service returns a validated fallback and includes the fallback reason in
-`generation_log`.
+When `MOMENTMARKT_LLM_PROVIDER` is unset, Pydantic AI model strings need a
+provider prefix, such as `openai:gpt-5.2`. Provider SDKs read their usual
+environment variables. If anything fails, the service returns a validated
+fallback and includes the fallback reason in `generation_log`.
 
 Per the agent contract, high-intent signals are ignored by Opportunity
 generation. Surfacing uses them later for thresholding and headline rewrites.
