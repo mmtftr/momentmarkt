@@ -271,6 +271,45 @@ export default function App() {
     return { opacity };
   });
 
+  // Top-of-map overlay fade-and-slide as the drawer expands. At snap 0
+  // (collapsed), pill + icons sit at full opacity in their natural
+  // position. As the user drags the sheet up, the LEFT pill slides
+  // further left and the RIGHT icons slide further right, fading out so
+  // they're invisible by the time the sheet reaches the medium snap.
+  // Apple Maps does this exact motion when the place card opens — the
+  // floating buttons get out of the way of the content surface.
+  const topOverlayLeftStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      animatedIndex.value,
+      [0, 0.6, 1],
+      [1, 0.5, 0],
+      Extrapolation.CLAMP,
+    );
+    const translateX = interpolate(
+      animatedIndex.value,
+      [0, 1],
+      [0, -32],
+      Extrapolation.CLAMP,
+    );
+    return { opacity, transform: [{ translateX }] };
+  });
+
+  const topOverlayRightStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      animatedIndex.value,
+      [0, 0.6, 1],
+      [1, 0.5, 0],
+      Extrapolation.CLAMP,
+    );
+    const translateX = interpolate(
+      animatedIndex.value,
+      [0, 1],
+      [0, 32],
+      Extrapolation.CLAMP,
+    );
+    return { opacity, transform: [{ translateX }] };
+  });
+
   const walletArea = (
     <View style={s("flex-1")}>
       {/* Full-bleed Apple Map background. Tapping a merchant's offer
@@ -435,14 +474,20 @@ export default function App() {
                       justifyContent: "space-between",
                     },
                   ]}
-                  pointerEvents="box-none"
+                  // Pointer events follow sheetIndex (the JS mirror of
+                  // animatedIndex). When the sheet is at medium / expanded,
+                  // the icons are visually invisible so they shouldn't
+                  // intercept taps that would otherwise reach the map.
+                  pointerEvents={sheetIndex >= 1 ? "none" : "box-none"}
                 >
-                  <MapWeatherPill
-                    tempC={city === "berlin" ? 11 : 14}
-                    neighborhood={city === "berlin" ? "Mitte" : "HB"}
-                    weatherEmoji={city === "berlin" ? "☔" : "☀"}
-                  />
-                  <View style={s("flex-row gap-2")}>
+                  <Animated.View style={topOverlayLeftStyle}>
+                    <MapWeatherPill
+                      tempC={city === "berlin" ? 11 : 14}
+                      neighborhood={city === "berlin" ? "Mitte" : "HB"}
+                      weatherEmoji={city === "berlin" ? "☔" : "☀"}
+                    />
+                  </Animated.View>
+                  <Animated.View style={[topOverlayRightStyle, ...s("flex-row gap-2")]}>
                     <MapIconButton
                       sfSymbol="clock"
                       accessibilityLabel="Open history"
@@ -453,7 +498,7 @@ export default function App() {
                       accessibilityLabel="Open settings"
                       onPress={handleOpenSettings}
                     />
-                  </View>
+                  </Animated.View>
                 </View>
               ) : null}
             </>
