@@ -43,7 +43,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -65,21 +65,36 @@ const THRESHOLD_X = 100;
 const THRESHOLD_VX = 600;
 const SWIPE_OUT_DURATION = 240;
 const SPRING_BACK_DURATION = 220;
-// Card-size pair for the two render modes. The drawer keeps the existing
-// in-sheet vertical budget; the full-screen overlay (issue #145) bumps the
-// stack to ~520pt so the cards take over the screen Tinder-style on a
-// 6.7" iPhone (Pro Max). Inner CardSurface bumps the WidgetRenderer's
-// minHeight in tandem so the photo-led GenUI hero scales with the stack.
+// Card-size pair for the three render modes. The drawer keeps the
+// in-sheet vertical budget (legacy); the full-screen overlay (issue
+// #145, now removed) bumped the stack to ~520pt; the Discover view
+// (issue #152) renders a simplified Tinder-style card without the
+// dark cocoa block / CTA / 3-dot indicator and uses the largest
+// card height so the photo dominates the surface.
 const STACK_MIN_HEIGHT_DRAWER = 460;
 const STACK_MIN_HEIGHT_FULLSCREEN = 540;
+const STACK_MIN_HEIGHT_DISCOVER = 540;
 const CARD_SURFACE_MIN_HEIGHT_DRAWER = 420;
 const CARD_SURFACE_MIN_HEIGHT_FULLSCREEN = 500;
+const CARD_SURFACE_MIN_HEIGHT_DISCOVER = 500;
 
 export type DwellByVariant = Record<string, number>;
 
-/** Render-size variant. Drawer = current in-sheet sizing. FullScreen =
- *  larger cards used by `SwipeFullScreenOverlay` (issue #145). */
-export type SwipeCardScale = "drawer" | "fullScreen";
+/** Render-size variant.
+ *
+ *   "drawer"     — legacy in-sheet sizing (used by the old wallet swipe
+ *                  surface, kept around for the alternatives step until
+ *                  Phase 5 removes the last consumer).
+ *   "fullScreen" — legacy full-screen overlay sizing (issue #145,
+ *                  removed in #152 — kept on the union for one phase
+ *                  to avoid a flapping API; Phase 5 cleans it up).
+ *   "discover"   — Discover view (issue #152). Same card height as
+ *                  fullScreen but renders the SimplifiedCardSurface:
+ *                  no dark cocoa block, no CTA, no eyebrow, no 3-dot
+ *                  indicator — Tinder essence (photo + minimal
+ *                  overlay text + discount badge + swipe).
+ */
+export type SwipeCardScale = "drawer" | "fullScreen" | "discover";
 
 type Props = {
   variants: AlternativeOffer[];
@@ -173,13 +188,22 @@ export function SwipeOfferStack({
   const peek2 = variants[index + 2];
 
   const stackMinHeight =
-    cardScale === "fullScreen"
-      ? STACK_MIN_HEIGHT_FULLSCREEN
-      : STACK_MIN_HEIGHT_DRAWER;
+    cardScale === "discover"
+      ? STACK_MIN_HEIGHT_DISCOVER
+      : cardScale === "fullScreen"
+        ? STACK_MIN_HEIGHT_FULLSCREEN
+        : STACK_MIN_HEIGHT_DRAWER;
   const surfaceMinHeight =
-    cardScale === "fullScreen"
-      ? CARD_SURFACE_MIN_HEIGHT_FULLSCREEN
-      : CARD_SURFACE_MIN_HEIGHT_DRAWER;
+    cardScale === "discover"
+      ? CARD_SURFACE_MIN_HEIGHT_DISCOVER
+      : cardScale === "fullScreen"
+        ? CARD_SURFACE_MIN_HEIGHT_FULLSCREEN
+        : CARD_SURFACE_MIN_HEIGHT_DRAWER;
+  // Discover mode (#152) hides the 3-dot position indicator — the stack
+  // peek already telegraphs "there are more cards" without the extra
+  // dot row competing with the photo for visual weight.
+  const showDots = cardScale !== "discover";
+  const useSimplified = cardScale === "discover";
 
   return (
     <View style={{ width: "100%" }}>
@@ -187,26 +211,31 @@ export function SwipeOfferStack({
           is spark-tinted, inactive dots are ink/15. Replaces the older
           "Card N of M / ← skip · keep →" text strip — the dots + the
           Tinder-style buttons below the stack carry the same signal
-          with less visual weight (issue #146 polish #4). */}
-      <View
-        style={[
-          ...s("flex-row items-center justify-center"),
-          { marginBottom: 10, gap: 4 },
-        ]}
-      >
-        {variants.map((v, i) => (
-          <View
-            key={`dot-${v.variant_id}`}
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: 3,
-              backgroundColor:
-                i === index ? "#f2542d" : "rgba(23, 18, 15, 0.15)",
-            }}
-          />
-        ))}
-      </View>
+          with less visual weight (issue #146 polish #4).
+          Discover mode (#152) hides the dot row — the stack peek
+          already shows there's more, and Tinder essence wants the
+          minimum overlay text. */}
+      {showDots ? (
+        <View
+          style={[
+            ...s("flex-row items-center justify-center"),
+            { marginBottom: 10, gap: 4 },
+          ]}
+        >
+          {variants.map((v, i) => (
+            <View
+              key={`dot-${v.variant_id}`}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor:
+                  i === index ? "#f2542d" : "rgba(23, 18, 15, 0.15)",
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
 
       <View style={{ width: "100%", minHeight: stackMinHeight, position: "relative" }}>
         {/* Layer 3 (deepest peek) — rendered FIRST so it sits underneath
@@ -217,6 +246,7 @@ export function SwipeOfferStack({
             variant={peek2}
             surfaceMinHeight={surfaceMinHeight}
             depth={2}
+            simplified={useSimplified}
           />
         ) : null}
         {peek1 ? (
@@ -225,6 +255,7 @@ export function SwipeOfferStack({
             variant={peek1}
             surfaceMinHeight={surfaceMinHeight}
             depth={1}
+            simplified={useSimplified}
           />
         ) : null}
         {top ? (
@@ -234,6 +265,7 @@ export function SwipeOfferStack({
             screenWidth={width}
             surfaceMinHeight={surfaceMinHeight}
             handleRef={swipeHandleRef}
+            simplified={useSimplified}
             onSwipeRight={() => handleRight(top)}
             onSwipeLeft={() => handleLeft(top)}
           />
@@ -334,10 +366,13 @@ function PeekCard({
   variant,
   surfaceMinHeight,
   depth,
+  simplified,
 }: {
   variant: AlternativeOffer;
   surfaceMinHeight: number;
   depth: 1 | 2;
+  /** When true, render the simplified Tinder-essence card (issue #152). */
+  simplified?: boolean;
 }) {
   const layer =
     depth === 1
@@ -360,11 +395,19 @@ function PeekCard({
         opacity: layer.opacity,
       }}
     >
-      <CardSurface
-        variant={variant}
-        interactive={false}
-        surfaceMinHeight={surfaceMinHeight}
-      />
+      {simplified ? (
+        <SimplifiedCardSurface
+          variant={variant}
+          surfaceMinHeight={surfaceMinHeight}
+          interactive={false}
+        />
+      ) : (
+        <CardSurface
+          variant={variant}
+          interactive={false}
+          surfaceMinHeight={surfaceMinHeight}
+        />
+      )}
     </View>
   );
 }
@@ -379,6 +422,7 @@ function SwipeCard({
   screenWidth,
   surfaceMinHeight,
   handleRef,
+  simplified,
   onSwipeRight,
   onSwipeLeft,
 }: {
@@ -386,6 +430,8 @@ function SwipeCard({
   screenWidth: number;
   surfaceMinHeight: number;
   handleRef?: React.MutableRefObject<SwipeCardHandle | null>;
+  /** When true, render the simplified Tinder-essence card (issue #152). */
+  simplified?: boolean;
   onSwipeRight: () => void;
   onSwipeLeft: () => void;
 }) {
@@ -496,11 +542,19 @@ function SwipeCard({
           cardStyle,
         ]}
       >
-        <CardSurface
-          variant={variant}
-          interactive
-          surfaceMinHeight={surfaceMinHeight}
-        />
+        {simplified ? (
+          <SimplifiedCardSurface
+            variant={variant}
+            surfaceMinHeight={surfaceMinHeight}
+            interactive
+          />
+        ) : (
+          <CardSurface
+            variant={variant}
+            interactive
+            surfaceMinHeight={surfaceMinHeight}
+          />
+        )}
         {/* Accept / skip overlays — corner badges so the swipe direction is
             unambiguous as the user pans. */}
         <Animated.View
@@ -596,6 +650,260 @@ function CardSurface({
       </View>
     </View>
   );
+}
+
+/**
+ * Simplified card surface for the Discover view (issue #152).
+ *
+ * Tinder essence — drop everything that competes with the photo:
+ *   • NO dark cocoa block under the photo (the original split the
+ *     card photo + text into two halves; we keep the photo full-bleed)
+ *   • NO bottom "Go to {merchant}" CTA (swipe right IS the CTA)
+ *   • NO eyebrow MERCHANT NAME small caps (photo + headline + the
+ *     navbar are enough merchant context)
+ *
+ * Keep:
+ *   • Photo full-bleed (≈70% of card height)
+ *   • Discount badge top-right of photo (existing spark pill renders
+ *     in SwipeCard's parent — see CardSurface; we replicate it here
+ *     so the simplified card still carries the discount signal)
+ *   • Headline as a large white overlay at the bottom of the photo,
+ *     with a dark gradient under it for legibility (gradient faked
+ *     by stacked semi-transparent black layers — no native dep
+ *     needed; expo-linear-gradient isn't installed)
+ *   • Subhead just below the headline overlay (small light text;
+ *     Agent 21 is improving the LLM-generated subhead copy quality
+ *     in parallel — this surface auto-picks up the better text)
+ *
+ * Pulls subhead + image URL out of the LLM-emitted widget_spec via
+ * `extractDisplaySlots()` so we never duplicate the per-category copy
+ * that lives server-side in `apps/backend/.../alternatives.py`.
+ */
+function SimplifiedCardSurface({
+  variant,
+  surfaceMinHeight,
+  interactive,
+}: {
+  variant: AlternativeOffer;
+  surfaceMinHeight: number;
+  interactive: boolean;
+}) {
+  const slots = useMemo(
+    () => extractDisplaySlots(variant.widget_spec),
+    [variant.widget_spec],
+  );
+  return (
+    <View
+      style={{
+        width: "100%",
+        minHeight: surfaceMinHeight,
+        borderRadius: 28,
+        overflow: "hidden",
+        backgroundColor: "#17120f",
+        opacity: interactive ? 1 : 0.92,
+        shadowColor: "#17120f",
+        shadowOpacity: 0.18,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+      }}
+    >
+      {slots.imageUrl ? (
+        <Image
+          source={{ uri: slots.imageUrl }}
+          accessibilityLabel={slots.imageAlt}
+          resizeMode="cover"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: "100%",
+            height: "100%",
+          }}
+        />
+      ) : (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "#6f3f2c",
+          }}
+        />
+      )}
+
+      {/* Discount pill — top-right corner, spark tint. Same vocabulary
+          as the legacy CardSurface's pill so the discount signal lands
+          in the same spot regardless of card mode. */}
+      <View
+        pointerEvents="none"
+        style={[
+          ...s("rounded-full bg-spark px-3 py-2"),
+          { position: "absolute", top: 14, right: 14, zIndex: 5 },
+        ]}
+      >
+        <Text style={s("text-xs font-black uppercase tracking-[2px] text-white")}>
+          {variant.discount_label}
+        </Text>
+      </View>
+
+      {/* Bottom dark gradient — stacked semi-transparent black layers
+          fake a vertical gradient so the headline reads against any
+          photo (bright daylight cafe interiors, dim bakery shots, …).
+          Three layers ≈ smooth enough for the demo without pulling
+          in expo-linear-gradient. */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: "55%",
+          backgroundColor: "rgba(23, 18, 15, 0.0)",
+        }}
+      >
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: "100%",
+            backgroundColor: "rgba(23, 18, 15, 0.35)",
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: "70%",
+            backgroundColor: "rgba(23, 18, 15, 0.45)",
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: "40%",
+            backgroundColor: "rgba(23, 18, 15, 0.55)",
+          }}
+        />
+      </View>
+
+      {/* Headline + subhead overlay — bottom of the card. Headline
+          large white; subhead one shade dimmer + smaller. */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: 20,
+          right: 20,
+          bottom: 22,
+          zIndex: 6,
+        }}
+      >
+        <Text
+          style={{
+            color: "#ffffff",
+            fontSize: 24,
+            fontWeight: "900",
+            letterSpacing: -0.4,
+            lineHeight: 30,
+          }}
+          numberOfLines={3}
+        >
+          {variant.headline}
+        </Text>
+        {slots.subhead ? (
+          <Text
+            style={{
+              marginTop: 6,
+              color: "rgba(255, 255, 255, 0.85)",
+              fontSize: 14,
+              fontWeight: "500",
+              lineHeight: 19,
+            }}
+            numberOfLines={2}
+          >
+            {slots.subhead}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Mine the LLM-emitted widget_spec for the photo URL + subhead text we
+ * need to render the simplified Discover-card overlay. Defensive: if
+ * the spec shape doesn't match what `_build_widget_spec()` emits, we
+ * return empty slots and the card falls through to a flat cocoa
+ * background + headline-only overlay — still readable, just less
+ * cinematic.
+ *
+ * Spec shape we expect (mirrors `apps/backend/.../alternatives.py`):
+ *   { type: "ScrollView", children: [
+ *       { type: "Image", source, accessibilityLabel },
+ *       { type: "View", children: [discountPill, eyebrow, headline, subhead, redeem] }
+ *   ] }
+ *
+ * We pluck `children[0].source` for the image and `children[1].children[3].text`
+ * for the subhead. Both lookups are isObject-guarded, so a spec
+ * authored by hand or by an unrelated LLM still degrades safely.
+ */
+function extractDisplaySlots(spec: unknown): {
+  imageUrl: string | null;
+  imageAlt: string;
+  subhead: string | null;
+} {
+  const empty = { imageUrl: null, imageAlt: "Offer photo", subhead: null };
+  if (!spec || typeof spec !== "object") return empty;
+  const root = spec as Record<string, unknown>;
+  if (!Array.isArray(root.children)) return empty;
+  const children = root.children as unknown[];
+  // Image lookup — first ScrollView child, expected to be Image.
+  let imageUrl: string | null = null;
+  let imageAlt = "Offer photo";
+  const firstChild = children[0] as Record<string, unknown> | undefined;
+  if (firstChild && firstChild.type === "Image") {
+    if (typeof firstChild.source === "string") imageUrl = firstChild.source;
+    if (typeof firstChild.accessibilityLabel === "string") {
+      imageAlt = firstChild.accessibilityLabel;
+    }
+  }
+  // Subhead lookup — second ScrollView child is a body View whose
+  // last Text child carries the subhead. We walk the body's children
+  // back-to-front to find the last Text child whose className includes
+  // "leading-6" (the canonical subhead className). This is more
+  // robust than indexing because the backend recently added/removed
+  // an eyebrow Text node in the same body (#147 / #151).
+  const body = children[1] as Record<string, unknown> | undefined;
+  let subhead: string | null = null;
+  if (body && body.type === "View" && Array.isArray(body.children)) {
+    const bodyChildren = body.children as unknown[];
+    for (let i = bodyChildren.length - 1; i >= 0; i--) {
+      const child = bodyChildren[i] as Record<string, unknown> | undefined;
+      if (
+        child &&
+        child.type === "Text" &&
+        typeof child.text === "string" &&
+        typeof child.className === "string" &&
+        child.className.includes("leading-6")
+      ) {
+        subhead = child.text;
+        break;
+      }
+    }
+  }
+  return { imageUrl, imageAlt, subhead };
 }
 
 /**
