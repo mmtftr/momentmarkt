@@ -11,18 +11,12 @@ type Props = {
   /** Backend city slug, e.g. "berlin" or "zurich". */
   city: string;
   /**
-   * Pre-#160 tap handler. App.tsx used to wire this to the alternatives
-   * swipe flow, but post-#160 the Browse tap target is the merchant
-   * detail view (`onMerchantOpen` below) — not the deal swipe. Kept on
-   * the prop API for any caller that still wants the old behaviour.
-   */
-  onMerchantTap?: (merchant: MerchantListItem) => void;
-  /**
    * Issue #160 — Browse merchant-first tap target. Tap a merchant row
    * in the Browse list → App.tsx opens the slide-in MerchantDetailView
-   * for that merchant. Takes priority over `onMerchantTap` when both
-   * are wired (the new mental model wins). The deal-swipe surface is
-   * the Discover tab's job, not Browse's.
+   * for that merchant. The deal-swipe surface is the Discover tab's
+   * job, not Browse's; the legacy in-drawer alternatives swipe flow
+   * (pre-#160 `onMerchantTap`) was removed in #174 once the detail
+   * view became the single tap target.
    */
   onMerchantOpen?: (merchant: MerchantListItem) => void;
   /** Fires when the user taps the search input. App.tsx wires this to
@@ -44,7 +38,6 @@ type Props = {
  */
 export function MerchantSearchList({
   city,
-  onMerchantTap,
   onMerchantOpen,
   onSearchFocus,
 }: Props) {
@@ -186,16 +179,12 @@ export function MerchantSearchList({
                 merchant={m}
                 onPress={() => {
                   lightTap();
-                  // Issue #160 — Browse-tap mental-model split. When a
-                  // caller wires `onMerchantOpen` (the new merchant-first
-                  // detail view path), prefer it over the legacy
-                  // `onMerchantTap` (which used to fire the alternatives
-                  // swipe stack — Discover's job, not Browse's).
-                  if (onMerchantOpen) {
-                    onMerchantOpen(m);
-                  } else {
-                    onMerchantTap?.(m);
-                  }
+                  // Issue #160 — Browse-tap = open the merchant detail
+                  // view. The legacy in-drawer alternatives swipe stack
+                  // (pre-#160 `onMerchantTap`) was removed in #174;
+                  // Discover owns the deal-swipe mental model, Browse
+                  // owns the merchant-first tap.
+                  onMerchantOpen?.(m);
                 }}
               />
             ))}

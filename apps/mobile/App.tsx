@@ -37,13 +37,10 @@ import { DiscoverView } from "./src/components/DiscoverView";
 import { DEFAULT_LENS, type LensKey } from "./src/components/LensChips";
 import { MerchantDetailView } from "./src/components/MerchantDetailView";
 import { RedeemFlow } from "./src/components/RedeemFlow";
-import { SwipeOfferStack } from "./src/components/SwipeOfferStack";
-import { SwipeStackSkeleton } from "./src/components/SwipeStackSkeleton";
 import { WalletSheetContent } from "./src/components/WalletSheetContent";
 import { WalletView } from "./src/components/WalletView";
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
 import {
-  fetchOfferAlternatives,
   type AlternativeOffer,
   type MerchantListItem,
   type PriorSwipe,
@@ -99,7 +96,6 @@ import { scoreSurfacing, type SurfacingInput } from "./src/surfacing/surfacingSc
 type DemoStep =
   | "silent"
   | "surfacing"
-  | "alternatives"
   | "offer"
   | "redeeming"
   | "success";
@@ -127,20 +123,14 @@ export default function App() {
   const [highIntent, setHighIntent] = useState(false);
   const [city, setCity] = useState<DemoCityId>("berlin");
   const [widgetVariant, setWidgetVariant] = useState<WidgetVariant>("rainHero");
-  // Issue #132 — swipe-to-pick state. The variant ladder lands here from
-  // /offers/alternatives once the user taps a merchant with an active_offer;
-  // the SheetBody renders SwipeOfferStack while step="alternatives" and
-  // routes through to step="offer" with `settledVariant` set as the active
-  // widget once the user swipes right (or left through every card → silent).
-  const [alternatives, setAlternatives] = useState<AlternativeOffer[] | null>(null);
+  // Issue #132 — `settledVariant` survives the in-drawer alternatives
+  // swipe path's #174 cleanup because the Wallet-tab redeem flow still
+  // uses it: tapping a saved pass calls `handleRedeemPass` which sets
+  // the variant + flips to step="offer" so SheetBody renders that
+  // variant's widget_spec via WidgetRenderer. The MerchantDetailView
+  // "Redeem now" path (#160) also clears it back to null so the
+  // canonical demo widget renders for that flow.
   const [settledVariant, setSettledVariant] = useState<AlternativeOffer | null>(null);
-  // Issue #156 — `loadingAlternatives` drives the SwipeStackSkeleton
-  // shimmer in the SheetBody while the merchant-tap fetch is in flight.
-  // Pre-#156 the user got ~500ms-2s of dead air between the tap and the
-  // swipe stack popping in (felt broken). True from the moment we kick
-  // off the fetch; false when we either land variants or fall back to
-  // the focused offer view.
-  const [loadingAlternatives, setLoadingAlternatives] = useState(false);
   // Issue #156 phase 4 — Discover-tab red dot. When a fresh
   // /offers/alternatives fetch lands a variant flagged
   // `is_special_surface=true` AND the user is on a non-Discover tab,
@@ -268,8 +258,8 @@ export default function App() {
       sheetRef.current?.snapToIndex(0);
       return;
     }
-    // alternatives, surfacing, offer, redeeming, success — all want the
-    // sheet expanded so the swipe stack / offer widget is fully visible.
+    // surfacing, offer, redeeming, success — all want the sheet
+    // expanded so the offer widget is fully visible.
     sheetRef.current?.snapToIndex(2);
   }, [step]);
 
@@ -337,7 +327,6 @@ export default function App() {
     // handleRedeemComplete pops the pass.
     setSettledVariant(pass.variant);
     setRedeemingPassId(pass.id);
-    setAlternatives(null);
     // The redeem flow lives inside the Browse view's BottomSheet (the
     // existing focused-offer surface). Flip to Browse so the sheet is
     // visible while step !== "silent". The navbar auto-hides per
@@ -362,20 +351,18 @@ export default function App() {
     setMerchantDetail(null);
   }, []);
   // "Redeem now" inside the detail view → close the detail + route into
-  // the existing offer→redeeming→success state machine. We don't go
-  // through the alternatives swipe stack (that's the Discover deal-flow
-  // surface, intentionally separated post-#160). Setting
+  // the existing offer→redeeming→success state machine. Setting
   // settledVariant=null + step="offer" makes SheetBody render the
-  // focused OfferStack with the canonical demo widget — same path the
-  // pre-#160 fallback used when /offers/alternatives returned no
-  // variants for a merchant tap. The merchant's discount headline
-  // shows on the detail view itself; the focused offer widget is the
-  // commit surface that owns the QR + cashback choreography.
+  // focused OfferStack with the canonical demo widget. The merchant's
+  // discount headline shows on the detail view itself; the focused
+  // offer widget is the commit surface that owns the QR + cashback
+  // choreography. (#174 cleanup: the in-drawer alternatives swipe
+  // stack — Discover's deal-flow path — used to live alongside this
+  // and was removed; Discover stays the single deal-swipe surface.)
   const handleRedeemFromMerchantDetail = useCallback(
     (_merchant: MerchantListItem) => {
       setMerchantDetail(null);
       setSettledVariant(null);
-      setAlternatives(null);
       setViewMode("browse");
       setStep("offer");
     },
@@ -420,132 +407,19 @@ export default function App() {
     [viewMode],
   );
 
-  // Issue #116 / #132: tapping a merchant card in the wallet drawer's
-  // search list now triggers the swipe-to-pick mechanic when the merchant
-  // has an active_offer:
-  //   1) Fire `/offers/alternatives` to get the 3-card variant ladder.
-  //   2) While loading, stay silent (no snap) so the sheet doesn't yank
-  //      open before there's anything to render.
-  //   3) On variants land → setStep("alternatives") → SwipeOfferStack
-  //      renders inside SheetBody.
-  //   4) Variant settle (right-swipe) → step="offer" with that variant's
-  //      widget_spec as the active rendered widget.
-  //   5) All-passed (3 left-swipes) → back to silent.
-  // If the backend is unreachable / returns null, gracefully fall back to
-  // the legacy single-card focused offer view so the demo stays recordable.
-  const handleMerchantTap = useCallback(
-    async (merchant: MerchantListItem) => {
-      if (!merchant.active_offer) return;
-      // Defensive (#152): the merchant list lives in Browse, so the user
-      // is already on Browse when this fires. The flip is a no-op in
-      // practice but keeps the focused offer / redeem flow safe even if
-      // a future surface (e.g. a long-press on a Discover card) routes
-      // through this handler from the wrong view.
-      setViewMode("browse");
-      // Reset any prior settled variant so the offer step renders the focused
-      // demo widget while we wait for alternatives.
-      setSettledVariant(null);
-      // Issue #156 — flip into the "alternatives" step BEFORE the fetch
-      // resolves so the BottomSheet snaps open and the SheetBody can
-      // render the SwipeStackSkeleton shimmer. Without this the user
-      // taps a merchant and sees ~500ms-2s of nothing (the previous
-      // behaviour, which Doruk flagged as "felt broken"). The skeleton
-      // occupies the same min-height the real swipe stack will occupy,
-      // so the cross-fade on resolve doesn't cause a layout shift.
-      setAlternatives(null);
-      setLoadingAlternatives(true);
-      setStep("alternatives");
-      // Send the accumulated swipe history so the backend preference agent
-      // re-ranks the next round by inferred preference. Empty history on
-      // first tap of the session → backend uses deterministic distance sort.
-      // Issue #137: signature shifted to an options object so the call
-      // site reads the same as the lens-driven calls inside the wallet
-      // drawer's primary swipe surface.
-      const res = await fetchOfferAlternatives({
-        merchantId: merchant.id,
-        lens: "for_you",
-        preferenceContext:
-          swipeHistory.length > 0 ? swipeHistory : undefined,
-      });
-      setLoadingAlternatives(false);
-      if (!res || res.variants.length === 0) {
-        // Demo-safety fallback: skip the swipe stack and route straight to
-        // the focused offer view. Matches the pre-#132 behaviour exactly.
-        setAlternatives(null);
-        setStep("offer");
-        return;
-      }
-      setAlternatives(res.variants);
-      // Issue #156 phase 4 — feed the resolved variants through the
-      // unread-special detector so a fresh is_special_surface card
-      // arms the Discover-tab red dot if the user is still on Browse.
-      handleVariantsResolved(res.variants);
-      // Step is already "alternatives" — no need to re-set it; the sheet
-      // is already snapped open and the SheetBody will switch from the
-      // skeleton to the real SwipeOfferStack via the cross-fade below.
-    },
-    [swipeHistory, handleVariantsResolved],
-  );
-
-  // Build PriorSwipe[] entries from a finished round's dwell map. The
-  // settled variant is `swiped_right: true`; everything else the user saw
-  // in this round is `swiped_right: false`. Variants the user never reached
-  // (no dwell entry) are dropped — only emit signals the user actually saw.
-  const buildPriorSwipes = useCallback(
-    (
-      dwellByVariant: Record<string, number>,
-      settled: AlternativeOffer | null,
-      roundVariants: AlternativeOffer[],
-    ): PriorSwipe[] =>
-      roundVariants
-        .filter((v) => dwellByVariant[v.variant_id] !== undefined)
-        .map((v) => ({
-          merchant_id: v.merchant_id,
-          dwell_ms: Math.max(0, Math.round(dwellByVariant[v.variant_id] ?? 0)),
-          swiped_right: settled?.variant_id === v.variant_id,
-        })),
-    [],
-  );
-
-  const handleAlternativesSettle = useCallback(
-    (variant: AlternativeOffer, dwellByVariant: Record<string, number>) => {
-      if (alternatives) {
-        const newSwipes = buildPriorSwipes(dwellByVariant, variant, alternatives);
-        if (newSwipes.length > 0) {
-          setSwipeHistory((prev) => [...prev, ...newSwipes]);
-        }
-      }
-      setSettledVariant(variant);
-      setStep("offer");
-    },
-    [alternatives, buildPriorSwipes],
-  );
-
-  // Issue #137 — the silent-step swipe stack inside WalletSheetContent
-  // appends fresh PriorSwipe entries here so App.tsx remains the single
-  // source of truth for accumulated history. The merchant-tap path
-  // (handleAlternativesSettle / handleAlternativesAllPassed) writes to
-  // the same state via setSwipeHistory, so both surfaces share the
-  // same preference signal across the session.
+  // Issue #137 — DiscoverView appends fresh PriorSwipe entries here
+  // so App.tsx remains the single source of truth for accumulated
+  // history. The lens-driven swipe stack inside Discover writes to
+  // this state via setSwipeHistory; the next /offers/alternatives
+  // call carries the history forward so the backend's preference
+  // agent re-ranks cross-merchant candidates by inferred user taste.
+  // (#174 cleanup: the in-drawer alternatives swipe path — which used
+  // to share this state via its own merchant-tap handler — was
+  // removed; Discover is now the only writer.)
   const handleAppendSwipeHistory = useCallback((entries: PriorSwipe[]) => {
     if (entries.length === 0) return;
     setSwipeHistory((prev) => [...prev, ...entries]);
   }, []);
-
-  const handleAlternativesAllPassed = useCallback(
-    (dwellByVariant: Record<string, number>) => {
-      if (alternatives) {
-        const newSwipes = buildPriorSwipes(dwellByVariant, null, alternatives);
-        if (newSwipes.length > 0) {
-          setSwipeHistory((prev) => [...prev, ...newSwipes]);
-        }
-      }
-      setSettledVariant(null);
-      setAlternatives(null);
-      setStep("silent");
-    },
-    [alternatives, buildPriorSwipes],
-  );
 
   const handleSheetChange = useCallback((index: number) => {
     setSheetIndex(index);
@@ -812,18 +686,13 @@ export default function App() {
           tempC={citySignals.tempC}
           weatherLabel={citySignals.weatherLabel}
           pulseLabel={citySignals.pulseLabel}
-          alternatives={alternatives}
-          loadingAlternatives={loadingAlternatives}
           settledVariant={settledVariant}
           onWidgetVariantChange={setWidgetVariant}
           onWidgetCta={handleAdvanceFromOffer}
           onRedeemComplete={handleRedeemComplete}
           onSuccessDone={handleResetToSilent}
-          onMerchantTap={handleMerchantTap}
           onMerchantOpen={handleOpenMerchantDetail}
           onSearchFocus={handleSearchFocus}
-          onAlternativesSettle={handleAlternativesSettle}
-          onAlternativesAllPassed={handleAlternativesAllPassed}
         />
       </BottomSheet>
 
@@ -933,11 +802,11 @@ export default function App() {
   );
 
   // Hide the navbar whenever a focused overlay step has taken over
-  // (alternatives / surfacing / offer / redeeming / success). The
-  // navbar reappears as soon as we're back at silent. This applies
-  // to both views — Browse's BottomSheet renders the focused screens,
-  // Discover doesn't initiate any non-silent step today but the
-  // logic is shared so the demo cut feels consistent.
+  // (surfacing / offer / redeeming / success). The navbar reappears
+  // as soon as we're back at silent. This applies to both views —
+  // Browse's BottomSheet renders the focused screens, Discover doesn't
+  // initiate any non-silent step today but the logic is shared so the
+  // demo cut feels consistent.
   const showNavBar = step === "silent";
 
   return (
@@ -1204,41 +1073,22 @@ type SheetBodyProps = {
   tempC: number;
   weatherLabel: string;
   pulseLabel: string;
-  /** Issue #132 — variant ladder for the swipe-to-pick stack. Null while
-   *  the alternatives fetch is in flight or when the merchant didn't
-   *  produce alternatives (gracefully falls through to legacy offer view). */
-  alternatives: AlternativeOffer[] | null;
-  /** Issue #156 — true while the merchant-tap fetch is in flight. Drives
-   *  the SwipeStackSkeleton shimmer that occupies the swipe stack's
-   *  position before the real cards arrive. */
-  loadingAlternatives: boolean;
-  /** Issue #132 — once the user swipes right on a stack card, the chosen
-   *  variant lives here and the focused offer view renders its widget_spec
-   *  instead of the demo `widgetVariant` switch. */
+  /** Issue #132 — once the user commits to a Wallet-tab saved pass via
+   *  `handleRedeemPass`, the chosen variant lives here and the focused
+   *  offer view renders its widget_spec instead of the demo
+   *  `widgetVariant` switch. Null for the canonical demo flow + the
+   *  MerchantDetailView "Redeem now" path. */
   settledVariant: AlternativeOffer | null;
   onWidgetVariantChange: (variant: WidgetVariant) => void;
   onWidgetCta: () => void;
   onRedeemComplete: () => void;
   onSuccessDone: () => void;
-  onMerchantTap: ComponentProps<typeof WalletSheetContent>["onMerchantTap"];
   /** Issue #160 — Browse merchant-first tap target. Tap a merchant
-   *  row → App.tsx opens the slide-in MerchantDetailView. The deal
-   *  swipe stack stays as `onMerchantTap` for legacy callers but
-   *  Browse no longer wires it. */
+   *  row → App.tsx opens the slide-in MerchantDetailView. */
   onMerchantOpen: ComponentProps<typeof WalletSheetContent>["onMerchantOpen"];
   /** Threaded down to MerchantSearchList's <TextInput onFocus> so tapping
    *  the search bar auto-snaps the sheet to its 80% top snap. Issue #125. */
   onSearchFocus: ComponentProps<typeof WalletSheetContent>["onSearchFocus"];
-  /** Issue #132 + #136 — fired when the user swipes right on a stack
-   *  card. App.tsx uses the dwell map to build PriorSwipe entries for
-   *  the next round's preference re-ranking. */
-  onAlternativesSettle: (
-    variant: AlternativeOffer,
-    dwellByVariant: Record<string, number>,
-  ) => void;
-  /** Issue #132 + #136 — fired when the user swipes left through every
-   *  card. Same dwell-map shape as onAlternativesSettle. */
-  onAlternativesAllPassed: (dwellByVariant: Record<string, number>) => void;
 };
 
 function SheetBody({
@@ -1252,18 +1102,13 @@ function SheetBody({
   tempC,
   weatherLabel,
   pulseLabel,
-  alternatives,
-  loadingAlternatives,
   settledVariant,
   onWidgetVariantChange,
   onWidgetCta,
   onRedeemComplete,
   onSuccessDone,
-  onMerchantTap,
   onMerchantOpen,
   onSearchFocus,
-  onAlternativesSettle,
-  onAlternativesAllPassed,
 }: SheetBodyProps) {
   // Redeem/Success screens own their own scroll surfaces internally, so a
   // plain BottomSheetView wrapper is fine here — gorhom requires a direct
@@ -1288,73 +1133,6 @@ function SheetBody({
           onDone={onSuccessDone}
         />
       </BottomSheetView>
-    );
-  }
-
-  // Issue #132: swipe-to-pick variant stack. Renders BEFORE the focused
-  // offer view so the user gets a 3-card escalating-discount stack to
-  // swipe through; right-swipe routes to step="offer" with the chosen
-  // variant, left-through-all returns to step="silent". Mirrors the
-  // offer view's chevron-back affordance for consistency.
-  //
-  // Issue #156 — also renders the SwipeStackSkeleton while
-  // `loadingAlternatives` is true and we don't have variants yet, so
-  // the merchant-tap → fetch round-trip never shows a blank sheet.
-  // The skeleton fades out as the real stack fades in (cross-fade
-  // owned by AlternativesBody).
-  const hasAlternatives = !!(alternatives && alternatives.length > 0);
-  if (step === "alternatives" && (loadingAlternatives || hasAlternatives)) {
-    return (
-      <BottomSheetScrollView
-        style={[...s("flex-1 bg-cream")]}
-        contentContainerStyle={s("px-5 py-6")}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to wallet"
-          // Chevron exit isn't a swipe round — pass an empty dwell map so
-          // we don't pollute the preference signal with a non-decision.
-          onPress={() => onAlternativesAllPassed({})}
-          hitSlop={12}
-          style={({ pressed }) => [
-            ...s("flex-row items-center"),
-            {
-              opacity: pressed ? 0.55 : 1,
-              marginLeft: -6,
-              paddingVertical: 6,
-              paddingRight: 4,
-              alignSelf: "flex-start",
-            },
-          ]}
-        >
-          <SymbolView
-            name="chevron.left"
-            tintColor="#f2542d"
-            size={22}
-            weight="semibold"
-            style={{ width: 22, height: 22 }}
-          />
-        </Pressable>
-        <Text
-          style={s("mt-2 text-xs font-bold uppercase tracking-[3px] text-cocoa")}
-        >
-          Pick a deal
-        </Text>
-        <Text
-          style={[
-            ...s("mt-1 text-sm text-neutral-600"),
-            { marginBottom: 16 },
-          ]}
-        >
-          Swipe right to keep, left to skip. The merchant set a range; you pick the spot.
-        </Text>
-        <AlternativesBody
-          loading={loadingAlternatives}
-          alternatives={alternatives}
-          onSettle={onAlternativesSettle}
-          onAllPassed={onAlternativesAllPassed}
-        />
-      </BottomSheetScrollView>
     );
   }
 
@@ -1452,69 +1230,9 @@ function SheetBody({
       weatherLabel={weatherLabel}
       pulseLabel={pulseLabel}
       animatedIndex={animatedIndex}
-      onMerchantTap={onMerchantTap}
       onMerchantOpen={onMerchantOpen}
       onSearchFocus={onSearchFocus}
     />
-  );
-}
-
-/**
- * Issue #156 — wraps the in-sheet alternatives loading skeleton and the
- * resolved swipe stack in a 150ms cross-fade so the merchant-tap fetch
- * never shows a blank sheet. While `loading` is true and we don't have
- * cards yet, we paint `SwipeStackSkeleton`. Once variants land, the
- * skeleton fades OUT and the real `SwipeOfferStack` fades IN. Both
- * layers are absolute-positioned in the same min-height container so
- * the cross-fade never causes a layout shift inside the BottomSheet.
- */
-function AlternativesBody({
-  loading,
-  alternatives,
-  onSettle,
-  onAllPassed,
-}: {
-  loading: boolean;
-  alternatives: AlternativeOffer[] | null;
-  onSettle: (
-    variant: AlternativeOffer,
-    dwellByVariant: Record<string, number>,
-  ) => void;
-  onAllPassed: (dwellByVariant: Record<string, number>) => void;
-}) {
-  const hasAlternatives = !!(alternatives && alternatives.length > 0);
-  const showSkeleton = loading && !hasAlternatives;
-  const fade = useSharedValue(showSkeleton ? 1 : 0);
-  useEffect(() => {
-    fade.value = withTiming(showSkeleton ? 1 : 0, {
-      duration: 150,
-      easing: Easing.out(Easing.quad),
-    });
-  }, [showSkeleton, fade]);
-
-  const skeletonStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
-  const realStyle = useAnimatedStyle(() => ({ opacity: 1 - fade.value }));
-
-  return (
-    <View style={{ width: "100%", minHeight: 460 }}>
-      {showSkeleton ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, skeletonStyle]}
-        >
-          <SwipeStackSkeleton />
-        </Animated.View>
-      ) : null}
-      {!showSkeleton && hasAlternatives ? (
-        <Animated.View style={realStyle}>
-          <SwipeOfferStack
-            variants={alternatives ?? []}
-            onSettle={onSettle}
-            onAllPassed={onAllPassed}
-          />
-        </Animated.View>
-      ) : null}
-    </View>
   );
 }
 
