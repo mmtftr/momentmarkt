@@ -100,6 +100,14 @@ type Props = {
    *  Optional — when omitted we skip the section entirely so unit tests and
    *  legacy call sites keep working. */
   devPanelProps?: DevPanelPassthroughProps;
+  /** Issue #159 — top-level City swap row. The DevPanel city control
+   *  inside Demo & Debug stays as the engineering surface; this is the
+   *  consumer-facing affordance, surfaced at the top of Settings instead
+   *  of buried four sections deep. Both props optional so legacy call
+   *  sites (overlay mode, tests) keep compiling — when either is missing
+   *  the City section silently no-ops out of the render. */
+  currentCity?: "berlin" | "zurich";
+  onSwapCity?: () => void;
 };
 
 export function SettingsScreen(props: Props): ReactElement | null {
@@ -113,6 +121,8 @@ export function SettingsScreen(props: Props): ReactElement | null {
     onSetLanguage,
     onResetDemo,
     devPanelProps,
+    currentCity,
+    onSwapCity,
   } = props;
 
   const isTabMode = mode === "tab";
@@ -301,6 +311,50 @@ export function SettingsScreen(props: Props): ReactElement | null {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── City (issue #159) ─────────────────────────────────────────
+            Top-level promotion of the city swap. Previously the only
+            city control lived inside DevPanel's Engine controls block,
+            four sections deep — fine for the tech video, useless as a
+            consumer affordance. Now the swap sits at the top of
+            Settings as a Berlin / Zurich segmented control. The dev
+            panel control still exists below in Demo & Debug for the
+            engineering surface.
+            Only renders when both props are wired (overlay-mode +
+            legacy callers don't pass them; the section silently
+            disappears). */}
+        {onSwapCity && currentCity ? (
+          <>
+            <SectionHeader>City</SectionHeader>
+            <GroupedSection>
+              <View
+                style={[
+                  ...s("flex-row px-4"),
+                  { paddingVertical: 12, gap: 8 },
+                ]}
+              >
+                <CityPill
+                  label="Berlin"
+                  active={currentCity === "berlin"}
+                  onPress={() => {
+                    if (currentCity !== "berlin") onSwapCity();
+                  }}
+                />
+                <CityPill
+                  label="Zurich"
+                  active={currentCity === "zurich"}
+                  onPress={() => {
+                    if (currentCity !== "zurich") onSwapCity();
+                  }}
+                />
+              </View>
+            </GroupedSection>
+            <SectionFooter>
+              Swaps the wallet&apos;s entire context — merchants, weather,
+              signals, map.
+            </SectionFooter>
+          </>
+        ) : null}
+
         {/* ── Account ──────────────────────────────────────────────────── */}
         <SectionHeader>Account</SectionHeader>
         <GroupedSection>
@@ -898,6 +952,50 @@ function LangSegment({
         style={[
           ...s("text-sm font-bold"),
           { color: active ? "#fff8ee" : "#17120f" },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Issue #159 — top-level City segmented control. Visually distinct from
+ * LangSegment on purpose: this row is the primary swap mechanic, so the
+ * active pill uses the spark accent (#f2542d) instead of ink. White
+ * inactive bg + faint border keeps the inactive option readable without
+ * competing — instant active/inactive read at a glance.
+ */
+function CityPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        ...s("flex-1 items-center rounded-2xl"),
+        {
+          paddingVertical: 12,
+          backgroundColor: active ? "#f2542d" : "#ffffff",
+          borderWidth: active ? 0 : 1,
+          borderColor: "rgba(23, 18, 15, 0.06)",
+          opacity: pressed ? 0.85 : 1,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          ...s(active ? "text-sm font-bold" : "text-sm font-semibold"),
+          { color: active ? "#ffffff" : "#6f3f2c" },
         ]}
       >
         {label}

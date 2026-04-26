@@ -769,22 +769,29 @@ export default function App() {
     <View style={s("flex-1")}>
       {walletArea}
       {viewMode === "browse" && step === "silent" ? (
+        // Issue #159 — repositioned from top-LEFT (legacy) to top-CENTER.
+        // After #154 moved gear+clock into the BottomNavBar, the top-right
+        // of Browse went empty and a pill anchored hard left looked
+        // off-balance. left:0 + right:0 + justifyContent:"center" lets
+        // the pill size to its content and sit on the horizontal axis
+        // — the natural focal point of the map's top edge. Pointer
+        // events still gate on sheetIndex so the pill never intercepts
+        // taps once the drawer has expanded past the collapsed snap.
+        // Wrapped in `topOverlayCenterStyle` (translateY-only fade) so
+        // the pill ducks toward the status bar as the drawer expands
+        // instead of sliding sideways from center (which looked drifty).
         <View
           style={[
-            ...s("absolute flex-row items-center"),
+            ...s("absolute flex-row items-center justify-center"),
             {
               top: insets.top + 12,
-              left: 16,
-              right: 16,
+              left: 0,
+              right: 0,
             },
           ]}
-          // Pointer events follow sheetIndex (the JS mirror of
-          // animatedIndex). When the sheet is at medium / expanded,
-          // the pill is visually invisible so it shouldn't intercept
-          // taps that would otherwise reach the map.
           pointerEvents={sheetIndex >= 1 ? "none" : "box-none"}
         >
-          <Animated.View style={topOverlayLeftStyle}>
+          <Animated.View style={topOverlayCenterStyle}>
             <MapWeatherPill
               cityName={city === "berlin" ? "Berlin" : "Zurich"}
               neighborhood={city === "berlin" ? "Mitte" : "HB"}
@@ -881,6 +888,17 @@ export default function App() {
                     onSetLanguage={handleSetLanguage}
                     onResetDemo={handleResetDemoFromSettings}
                     devPanelProps={settingsDevPanelProps}
+                    // Issue #159 — promote city swap to a top-level
+                    // Settings row. The DevPanel city control inside
+                    // Demo & Debug stays as the engineering surface;
+                    // this exposes the swap as a consumer-facing
+                    // affordance one tap deep instead of four sections
+                    // deep. handleSwapCity owns the full reload chain
+                    // (/merchants, /signals, map flyTo, swipeHistory
+                    // reset) so passing it directly preserves the
+                    // existing demo-safe behaviour.
+                    currentCity={city}
+                    onSwapCity={handleSwapCity}
                   />
                 </View>
               ) : null}
