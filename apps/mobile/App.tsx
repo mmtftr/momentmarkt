@@ -33,9 +33,14 @@ import type { SFSymbol } from "sf-symbols-typescript";
 import { CityMap } from "./src/components/CityMap";
 import { DevPanel, type DevPanelSignal } from "./src/components/DevPanel";
 import { RedeemFlow } from "./src/components/RedeemFlow";
+import { SwipeOfferStack } from "./src/components/SwipeOfferStack";
 import { WalletSheetContent } from "./src/components/WalletSheetContent";
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
-import type { MerchantListItem } from "./src/lib/api";
+import {
+  fetchOfferAlternatives,
+  type AlternativeOffer,
+  type MerchantListItem,
+} from "./src/lib/api";
 import { useSignals } from "./src/lib/useSignals";
 import { cityProfiles, type DemoCityId, type DemoCityProfile } from "./src/demo/cityProfiles";
 import { miaRainOffer } from "./src/demo/miaOffer";
@@ -82,7 +87,13 @@ import { scoreSurfacing, type SurfacingInput } from "./src/surfacing/surfacingSc
  *     demo-recording surface).
  */
 
-type DemoStep = "silent" | "surfacing" | "offer" | "redeeming" | "success";
+type DemoStep =
+  | "silent"
+  | "surfacing"
+  | "alternatives"
+  | "offer"
+  | "redeeming"
+  | "success";
 type WidgetVariant = keyof typeof demoWidgetSpecs;
 
 const SIDE_BY_SIDE_BREAKPOINT = 820;
@@ -107,6 +118,13 @@ export default function App() {
   const [highIntent, setHighIntent] = useState(false);
   const [city, setCity] = useState<DemoCityId>("berlin");
   const [widgetVariant, setWidgetVariant] = useState<WidgetVariant>("rainHero");
+  // Issue #132 — swipe-to-pick state. The variant ladder lands here from
+  // /offers/alternatives once the user taps a merchant with an active_offer;
+  // the SheetBody renders SwipeOfferStack while step="alternatives" and
+  // routes through to step="offer" with `settledVariant` set as the active
+  // widget once the user swipes right (or left through every card → silent).
+  const [alternatives, setAlternatives] = useState<AlternativeOffer[] | null>(null);
+  const [settledVariant, setSettledVariant] = useState<AlternativeOffer | null>(null);
   // DevPanel overlay state (issue #70). In compact mode (<820px) the
   // engineering surface lives behind the MapTopChip; tapping it slides the
   // full DevPanel in from the right. Wide mode keeps its sidecar layout.
@@ -182,6 +200,8 @@ export default function App() {
       sheetRef.current?.snapToIndex(0);
       return;
     }
+    // alternatives, surfacing, offer, redeeming, success — all want the
+    // sheet expanded so the swipe stack / offer widget is fully visible.
     sheetRef.current?.snapToIndex(2);
   }, [step]);
 
@@ -213,14 +233,48 @@ export default function App() {
     setStep("silent");
   }, []);
 
-  // Issue #116: tapping a merchant card in the wallet drawer's search list
-  // surfaces that merchant's offer in the drawer's expanded slot. We re-use
-  // the existing offer beat (step === "offer") + OfferStack — no parallel
-  // surface required. Cards without an active offer just play a haptic and
-  // stay put (handled by MerchantSearchList's lightTap call); we only flip
-  // the demo step when there's actually an offer to render.
-  const handleMerchantTap = useCallback((merchant: MerchantListItem) => {
-    if (merchant.active_offer) setStep("offer");
+  // Issue #116 / #132: tapping a merchant card in the wallet drawer's
+  // search list now triggers the swipe-to-pick mechanic when the merchant
+  // has an active_offer:
+  //   1) Fire `/offers/alternatives` to get the 3-card variant ladder.
+  //   2) While loading, stay silent (no snap) so the sheet doesn't yank
+  //      open before there's anything to render.
+  //   3) On variants land → setStep("alternatives") → SwipeOfferStack
+  //      renders inside SheetBody.
+  //   4) Variant settle (right-swipe) → step="offer" with that variant's
+  //      widget_spec as the active rendered widget.
+  //   5) All-passed (3 left-swipes) → back to silent.
+  // If the backend is unreachable / returns null, gracefully fall back to
+  // the legacy single-card focused offer view so the demo stays recordable.
+  const handleMerchantTap = useCallback(async (merchant: MerchantListItem) => {
+    if (!merchant.active_offer) return;
+    // Reset any prior settled variant so the offer step renders the focused
+    // demo widget while we wait for alternatives.
+    setSettledVariant(null);
+    const res = await fetchOfferAlternatives(merchant.id);
+    if (!res || res.variants.length === 0) {
+      // Demo-safety fallback: skip the swipe stack and route straight to
+      // the focused offer view. Matches the pre-#132 behaviour exactly.
+      setAlternatives(null);
+      setStep("offer");
+      return;
+    }
+    setAlternatives(res.variants);
+    setStep("alternatives");
+  }, []);
+
+  const handleAlternativesSettle = useCallback(
+    (variant: AlternativeOffer) => {
+      setSettledVariant(variant);
+      setStep("offer");
+    },
+    [],
+  );
+
+  const handleAlternativesAllPassed = useCallback(() => {
+    setSettledVariant(null);
+    setAlternatives(null);
+    setStep("silent");
   }, []);
 
   const handleSheetChange = useCallback((index: number) => {
@@ -414,12 +468,16 @@ export default function App() {
           tempC={citySignals.tempC}
           weatherLabel={citySignals.weatherLabel}
           pulseLabel={citySignals.pulseLabel}
+          alternatives={alternatives}
+          settledVariant={settledVariant}
           onWidgetVariantChange={setWidgetVariant}
           onWidgetCta={handleAdvanceFromOffer}
           onRedeemComplete={handleRedeemComplete}
           onSuccessDone={handleResetToSilent}
           onMerchantTap={handleMerchantTap}
           onSearchFocus={handleSearchFocus}
+          onAlternativesSettle={handleAlternativesSettle}
+          onAlternativesAllPassed={handleAlternativesAllPassed}
         />
       </BottomSheet>
 
@@ -702,6 +760,14 @@ type SheetBodyProps = {
   tempC: number;
   weatherLabel: string;
   pulseLabel: string;
+  /** Issue #132 — variant ladder for the swipe-to-pick stack. Null while
+   *  the alternatives fetch is in flight or when the merchant didn't
+   *  produce alternatives (gracefully falls through to legacy offer view). */
+  alternatives: AlternativeOffer[] | null;
+  /** Issue #132 — once the user swipes right on a stack card, the chosen
+   *  variant lives here and the focused offer view renders its widget_spec
+   *  instead of the demo `widgetVariant` switch. */
+  settledVariant: AlternativeOffer | null;
   onWidgetVariantChange: (variant: WidgetVariant) => void;
   onWidgetCta: () => void;
   onRedeemComplete: () => void;
@@ -710,6 +776,10 @@ type SheetBodyProps = {
   /** Threaded down to MerchantSearchList's <TextInput onFocus> so tapping
    *  the search bar auto-snaps the sheet to its 80% top snap. Issue #125. */
   onSearchFocus: ComponentProps<typeof WalletSheetContent>["onSearchFocus"];
+  /** Issue #132 — fired when the user swipes right on a stack card. */
+  onAlternativesSettle: (variant: AlternativeOffer) => void;
+  /** Issue #132 — fired when the user swipes left through every card. */
+  onAlternativesAllPassed: () => void;
 };
 
 function SheetBody({
@@ -723,12 +793,16 @@ function SheetBody({
   tempC,
   weatherLabel,
   pulseLabel,
+  alternatives,
+  settledVariant,
   onWidgetVariantChange,
   onWidgetCta,
   onRedeemComplete,
   onSuccessDone,
   onMerchantTap,
   onSearchFocus,
+  onAlternativesSettle,
+  onAlternativesAllPassed,
 }: SheetBodyProps) {
   // Redeem/Success screens own their own scroll surfaces internally, so a
   // plain BottomSheetView wrapper is fine here — gorhom requires a direct
@@ -753,6 +827,63 @@ function SheetBody({
           onDone={onSuccessDone}
         />
       </BottomSheetView>
+    );
+  }
+
+  // Issue #132: swipe-to-pick variant stack. Renders BEFORE the focused
+  // offer view so the user gets a 3-card escalating-discount stack to
+  // swipe through; right-swipe routes to step="offer" with the chosen
+  // variant, left-through-all returns to step="silent". Mirrors the
+  // offer view's chevron-back affordance for consistency.
+  if (step === "alternatives" && alternatives && alternatives.length > 0) {
+    return (
+      <BottomSheetScrollView
+        style={[...s("flex-1 bg-cream")]}
+        contentContainerStyle={s("px-5 py-6")}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to wallet"
+          onPress={onAlternativesAllPassed}
+          hitSlop={12}
+          style={({ pressed }) => [
+            ...s("flex-row items-center"),
+            {
+              opacity: pressed ? 0.55 : 1,
+              marginLeft: -6,
+              paddingVertical: 6,
+              paddingRight: 4,
+              alignSelf: "flex-start",
+            },
+          ]}
+        >
+          <SymbolView
+            name="chevron.left"
+            tintColor="#f2542d"
+            size={22}
+            weight="semibold"
+            style={{ width: 22, height: 22 }}
+          />
+        </Pressable>
+        <Text
+          style={s("mt-2 text-xs font-bold uppercase tracking-[3px] text-cocoa")}
+        >
+          Pick a deal
+        </Text>
+        <Text
+          style={[
+            ...s("mt-1 text-sm text-neutral-600"),
+            { marginBottom: 16 },
+          ]}
+        >
+          Swipe right to keep, left to skip. The merchant set a range; you pick the spot.
+        </Text>
+        <SwipeOfferStack
+          variants={alternatives}
+          onSettle={onAlternativesSettle}
+          onAllPassed={onAlternativesAllPassed}
+        />
+      </BottomSheetScrollView>
     );
   }
 
@@ -799,13 +930,39 @@ function SheetBody({
           MomentMarkt
         </Text>
         <View style={s("mt-4")}>
-          <OfferStack
-            widgetVariant={widgetVariant}
-            highIntent={highIntent}
-            aggressiveHeadline={aggressiveHeadline}
-            onWidgetVariantChange={onWidgetVariantChange}
-            onWidgetCta={onWidgetCta}
-          />
+          {settledVariant ? (
+            // Issue #132: when the user committed to a swipe-stack variant,
+            // render its widget_spec directly via WidgetRenderer instead of
+            // the hand-authored demoWidgetSpecs ladder. The CTA still routes
+            // through onWidgetCta → handleAdvanceFromOffer → step="redeeming"
+            // so the existing redeem flow takes over from here.
+            <View style={s("flex-1")}>
+              <View style={[...s("mb-3 rounded-2xl bg-spark px-4 py-3")]}>
+                <Text
+                  style={s("text-xs font-bold uppercase tracking-[2px] text-white")}
+                >
+                  Your pick
+                </Text>
+                <Text
+                  style={s("mt-1 text-base font-black leading-6 text-white")}
+                >
+                  {`${settledVariant.discount_label} · ${settledVariant.headline}`}
+                </Text>
+              </View>
+              <WidgetRenderer
+                node={settledVariant.widget_spec}
+                onRedeem={onWidgetCta}
+              />
+            </View>
+          ) : (
+            <OfferStack
+              widgetVariant={widgetVariant}
+              highIntent={highIntent}
+              aggressiveHeadline={aggressiveHeadline}
+              onWidgetVariantChange={onWidgetVariantChange}
+              onWidgetCta={onWidgetCta}
+            />
+          )}
         </View>
       </BottomSheetScrollView>
     );

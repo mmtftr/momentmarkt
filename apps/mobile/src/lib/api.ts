@@ -550,3 +550,91 @@ export async function fetchHistory(
     return null;
   }
 }
+
+/* ------------------------------------------------------------------ *\
+ * Offer alternatives — swipe-to-pick price discovery (issue #132)    *
+ *                                                                    *
+ * Mobile-shaped wrapper for `POST /offers/alternatives`. The wallet  *
+ * drawer fetches a 3-card variant ladder when the user taps a        *
+ * merchant with an active_offer; SwipeOfferStack renders the cards   *
+ * with iOS-native pan physics. Returns null on any failure (network, *
+ * non-2xx, parse, malformed payload) so callers fall back to the     *
+ * focused offer view directly — keeps the demo recordable.           *
+ *                                                                    *
+ * Backend FastAPI shape (apps/backend/.../main.py):                  *
+ *   class AlternativeOffer:                                          *
+ *     variant_id, headline, discount_pct, discount_label, widget_spec*
+ *   class AlternativesResponse:                                      *
+ *     { merchant_id: str, variants: AlternativeOffer[] }             *
+\* ------------------------------------------------------------------ */
+
+export type AlternativeOffer = {
+  variant_id: string;
+  headline: string;
+  discount_pct: number;
+  /** Display string like "−10%" — already formatted by the backend. */
+  discount_label: string;
+  /** Validated downstream by widgetSchema.ts (unknown shape on the wire). */
+  widget_spec: unknown;
+};
+
+export type AlternativesResponse = {
+  merchant_id: string;
+  variants: AlternativeOffer[];
+};
+
+/**
+ * Fetch the 3-card swipe-stack variant ladder for a merchant. Default body
+ * matches the backend defaults (5..25% over 3 variants, no LLM). Returns
+ * `null` on any failure so SwipeOfferStack callers can collapse the extra
+ * hop and route straight to the focused offer view.
+ */
+export async function fetchOfferAlternatives(
+  merchantId: string,
+  signal?: AbortSignal,
+): Promise<AlternativesResponse | null> {
+  try {
+    const r = await fetch(`${apiBase()}/offers/alternatives`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        merchant_id: merchantId,
+        base_discount_pct: 5,
+        max_discount_pct: 25,
+        n: 3,
+        use_llm: false,
+      }),
+      signal,
+    });
+    if (!r.ok) return null;
+    const data = (await r.json()) as Partial<AlternativesResponse> & Record<string, unknown>;
+    if (
+      typeof data.merchant_id !== "string" ||
+      !Array.isArray(data.variants)
+    ) {
+      return null;
+    }
+    const variants: AlternativeOffer[] = data.variants
+      .filter(
+        (v): v is AlternativeOffer =>
+          !!v &&
+          typeof (v as AlternativeOffer).variant_id === "string" &&
+          typeof (v as AlternativeOffer).headline === "string" &&
+          typeof (v as AlternativeOffer).discount_pct === "number" &&
+          typeof (v as AlternativeOffer).discount_label === "string" &&
+          typeof (v as AlternativeOffer).widget_spec === "object" &&
+          (v as AlternativeOffer).widget_spec !== null,
+      )
+      .map((v) => ({
+        variant_id: v.variant_id,
+        headline: v.headline,
+        discount_pct: v.discount_pct,
+        discount_label: v.discount_label,
+        widget_spec: v.widget_spec,
+      }));
+    if (variants.length === 0) return null;
+    return { merchant_id: data.merchant_id, variants };
+  } catch {
+    return null;
+  }
+}
