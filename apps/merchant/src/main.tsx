@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import density from "../../../data/transactions/berlin-density.json";
+import { ApiStatus } from "./ApiStatus";
 import "./styles.css";
 
 const MERCHANT_ID = "berlin-mitte-cafe-bondi";
@@ -177,7 +178,10 @@ function App() {
             signals for the Berlin lunch window.
           </p>
         </div>
-        <LiveStatus poll={poll} />
+        <div className="hero-status">
+          <ApiStatus />
+          <LiveStatus poll={poll} />
+        </div>
       </section>
 
       <DemandGapHero />
