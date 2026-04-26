@@ -1,9 +1,10 @@
 import { SymbolView } from "expo-symbols";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   Image,
   RefreshControl,
   ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -12,7 +13,7 @@ import {
 import { s } from "../styles";
 
 /**
- * HistoryScreen — "Cashback-Verlauf" (issues #39 + #74).
+ * HistoryScreen — "Cashback-Verlauf" (issues #39 + #74 + #100).
  *
  * Wallet-history surface inspired by food-delivery 'Past orders' and iOS Wallet
  * history. Replaces the old Proof tab with a list of past cashback redemptions
@@ -20,9 +21,14 @@ import { s } from "../styles";
  * state. No backend; deterministic Berlin Mitte fixture so the demo cut is
  * stable. Ink-on-cream palette consistent with LockScreen / Offer.
  *
- * Wired from App.tsx via a top-level `view: "demo" | "history"` state. Tapping
- * Verlauf in the bottom menu flips to "history"; tapping Home / Offer / QR
- * flips back to "demo" (which still respects the underlying state machine).
+ * Wired from App.tsx via a top-level `view` selector. Tapping History flips to
+ * "history"; tapping Home / Offer / QR flips back to "demo" (which still
+ * respects the underlying state machine).
+ *
+ * Issue #100 design pass: structure now mirrors SettingsScreen — small
+ * uppercase letter-spaced section headers above white rounded-2xl grouped
+ * cards with hairline row separators. Same data + chart + 8 redemptions, new
+ * visual rhythm so History and Settings feel like one product surface.
  */
 
 type Redemption = {
@@ -30,7 +36,7 @@ type Redemption = {
   merchant: string;
   address: string;
   cashback: number;
-  /** Display-ready relative date, e.g. "Heute, 13:31". */
+  /** Display-ready relative date, e.g. "Today, 13:31". */
   date: string;
   /** One-line surfacing context shown as a chip. */
   context: string;
@@ -121,7 +127,7 @@ function formatEuro(value: number): string {
 /**
  * Build 12 deterministic bars representing the last 12 days. The 8 redemptions
  * are mapped onto specific day-offsets so the chart looks naturally sparse
- * without requiring real timestamps. Empty days render as a flat 8px grey bar.
+ * without requiring real timestamps. Empty days render as a flat 6px grey bar.
  */
 function buildBars(redemptions: Redemption[]): Array<{ amount: number }> {
   // Day offsets (0 = today, 11 = 11 days ago). Picked to create a believable
@@ -191,7 +197,7 @@ export function HistoryScreen({
     <View style={s("flex-1 bg-cream")}>
       <ScrollView
         style={s("flex-1")}
-        contentContainerStyle={s("px-5")}
+        contentContainerStyle={[...s("px-5"), { paddingBottom: 32 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -201,124 +207,153 @@ export function HistoryScreen({
           />
         }
       >
-        {/* Header — big title + dynamic monthly subtotal. */}
-        <View style={s("py-6")}>
-          <Text style={[...s("text-ink"), { fontSize: 32, fontWeight: "800" }]}>
-            Cashback history
-          </Text>
-          <Text style={s("mt-2 text-sm text-neutral-600")}>
-            You saved €{formatEuro(total)} this month
-          </Text>
-        </View>
-
-        {/* Summary card — total + 12-day spark chart + top-cashback chip. */}
+        {/* Header — large title matches SettingsScreen's typographic rhythm. */}
         <View
           style={[
-            ...s("bg-cream"),
-            {
-              borderRadius: 24,
-              padding: 24,
-              borderWidth: 1,
-              borderColor: "rgba(23, 18, 15, 0.08)",
-            },
+            ...s("flex-row items-end justify-between"),
+            { paddingTop: 8, paddingBottom: 12 },
           ]}
         >
-          <Text style={[...s("text-ink"), { fontSize: 48, fontWeight: "200" }]}>
-            €{formatEuro(total)}
+          <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
+            History
           </Text>
-          <Text style={s("mt-1 text-xs text-neutral-600")}>
-            This month · {redemptions.length} purchases
-          </Text>
+        </View>
 
-          {/* Mini bar chart — 12 vertical bars, last 12 days, oldest→newest. */}
+        {/* ── This month ──────────────────────────────────────────────── */}
+        <SectionHeader>This month</SectionHeader>
+        <GroupedSection>
+          {/* Big total + subtitle (acts as the section's hero row). */}
           <View
-            style={[
-              { flexDirection: "row", alignItems: "flex-end", marginTop: 20, height: 56 },
-            ]}
+            style={[...s("px-4"), { paddingTop: 16, paddingBottom: 12 }]}
           >
-            {bars.map((b, i) => {
-              const isActive = b.amount > 0;
-              // Empty days = flat 8px grey. Active = scaled 16-48px in spark-red.
-              const height = isActive
-                ? Math.max(16, Math.round((b.amount / Math.max(maxBar, 0.01)) * 48))
-                : 8;
-              return (
-                <View
-                  key={i}
-                  style={{
-                    width: 8,
-                    marginRight: 4,
-                    height,
-                    borderRadius: 4,
-                    backgroundColor: isActive ? "#f2542d" : "rgba(23, 18, 15, 0.1)",
-                  }}
-                />
-              );
-            })}
+            <Text
+              style={[
+                ...s("text-ink"),
+                { fontSize: 40, fontWeight: "200", letterSpacing: -1 },
+              ]}
+            >
+              €{formatEuro(total)}
+            </Text>
+            <Text style={s("mt-1 text-xs text-neutral-600")}>
+              {redemptions.length} purchases · saved this month
+            </Text>
+          </View>
+          <RowSeparator />
+
+          {/* Mini 12-day bar chart row. */}
+          <View style={[...s("px-4"), { paddingVertical: 14 }]}>
+            <Text
+              style={[
+                ...s("text-cocoa"),
+                {
+                  fontSize: 10,
+                  fontWeight: "700",
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  marginBottom: 10,
+                },
+              ]}
+            >
+              Last 12 days
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "flex-end",
+                height: 48,
+              }}
+            >
+              {bars.map((b, i) => {
+                const isActive = b.amount > 0;
+                const height = isActive
+                  ? Math.max(14, Math.round((b.amount / Math.max(maxBar, 0.01)) * 44))
+                  : 6;
+                return (
+                  <View
+                    key={i}
+                    style={{
+                      width: 8,
+                      marginRight: 5,
+                      height,
+                      borderRadius: 4,
+                      backgroundColor: isActive
+                        ? "#f2542d"
+                        : "rgba(23, 18, 15, 0.1)",
+                    }}
+                  />
+                );
+              })}
+            </View>
           </View>
 
-          {/* Top-cashback chip. */}
-          {top && (
-            <View style={[{ flexDirection: "row", alignItems: "center", marginTop: 20 }]}>
+          {/* Top-cashback row — Settings-row layout (icon + label left, value right). */}
+          {top ? (
+            <>
+              <RowSeparator />
               <View
                 style={[
-                  ...s("flex-row items-center rounded-full px-3 py-1"),
-                  { backgroundColor: "rgba(242, 84, 45, 0.12)", gap: 4 },
+                  ...s("flex-row items-center justify-between px-4"),
+                  { paddingVertical: 14, minHeight: 56 },
                 ]}
               >
-                <SymbolView
-                  name="trophy.fill"
-                  size={12}
-                  tintColor="#f2542d"
-                  weight="medium"
-                />
+                <View style={s("flex-row items-center")}>
+                  <SymbolView
+                    name="trophy.fill"
+                    tintColor="#f2542d"
+                    size={14}
+                    weight="medium"
+                    style={{ width: 16, height: 16 }}
+                  />
+                  <Text style={[...s("text-base text-ink"), { marginLeft: 10 }]}>
+                    Top cashback
+                  </Text>
+                </View>
                 <Text
-                  style={s(
-                    "text-[11px] font-bold uppercase tracking-[1px] text-spark",
-                  )}
+                  style={[
+                    ...s("text-sm text-neutral-600"),
+                    { maxWidth: "55%", textAlign: "right" },
+                  ]}
+                  numberOfLines={1}
                 >
-                  Top cashback
+                  {top.merchant} · €{formatEuro(top.cashback)}
                 </Text>
               </View>
-              <Text style={[...s("text-xs text-ink"), { marginLeft: 8 }]}>
-                {top.merchant} · €{formatEuro(top.cashback)}
-              </Text>
-            </View>
-          )}
-        </View>
+            </>
+          ) : null}
+        </GroupedSection>
 
-        {/* Section header. */}
+        {/* ── Recent purchases ────────────────────────────────────────── */}
+        <SectionHeader>Recent purchases</SectionHeader>
+        <GroupedSection>
+          {redemptions.map((r, i) => (
+            <View key={r.id}>
+              <RedemptionRow redemption={r} />
+              {i < redemptions.length - 1 ? <RowSeparator /> : null}
+            </View>
+          ))}
+        </GroupedSection>
+        <SectionFooter>
+          Synthetic data · deterministic Berlin Mitte fixture for the demo cut.
+        </SectionFooter>
+
         <Text
           style={[
-            ...s("mt-6 mb-3 text-cocoa"),
-            {
-              fontSize: 12,
-              fontWeight: "700",
-              textTransform: "uppercase",
-              letterSpacing: 2,
-            },
+            ...s("text-center text-xs text-neutral-600"),
+            { marginTop: 24 },
           ]}
         >
-          Recent purchases
+          MomentMarkt · Demo build
         </Text>
-
-        {redemptions.map((r) => (
-          <RedemptionRow key={r.id} redemption={r} />
-        ))}
-
-        <View style={s("py-6")}>
-          <Text style={s("text-center text-xs text-neutral-600")}>
-            Synthetic data · Demo build
-          </Text>
-        </View>
       </ScrollView>
     </View>
   );
 }
 
 /**
- * Single redemption row: 56×56 photo thumb + merchant/address/context column +
- * right-aligned cashback / date column. Tap is a placeholder no-op.
+ * Single redemption row in the Settings-row layout: 44×44 photo thumb + name
+ * (with address · context underneath) on the left, +€ amount + time on the
+ * right. Tap is a placeholder no-op; chevron is intentionally omitted because
+ * there is no detail screen wired yet (would feel broken if it didn't navigate).
  */
 function RedemptionRow({ redemption }: { redemption: Redemption }) {
   return (
@@ -328,11 +363,8 @@ function RedemptionRow({ redemption }: { redemption: Redemption }) {
         /* placeholder — no detail screen wired yet */
       }}
       style={[
-        {
-          flexDirection: "row",
-          alignItems: "center",
-          paddingVertical: 12,
-        },
+        ...s("flex-row items-center px-4"),
+        { paddingVertical: 12, minHeight: 64 },
       ]}
     >
       <MerchantPhoto uri={redemption.photo} />
@@ -341,32 +373,31 @@ function RedemptionRow({ redemption }: { redemption: Redemption }) {
         <Text style={[...s("text-ink"), { fontSize: 15, fontWeight: "700" }]}>
           {redemption.merchant}
         </Text>
-        <Text style={s("text-xs text-neutral-600")}>{redemption.address}</Text>
-        <View style={{ flexDirection: "row", marginTop: 4 }}>
-          <View
+        <View
+          style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}
+        >
+          <Text style={[...s("text-xs text-neutral-600")]} numberOfLines={1}>
+            {redemption.address}
+          </Text>
+          <Text
+            style={[...s("text-xs text-neutral-600"), { marginHorizontal: 6 }]}
+          >
+            ·
+          </Text>
+          <Text
             style={[
-              ...s("rounded-full"),
+              ...s("text-cocoa"),
               {
-                backgroundColor: "rgba(111, 63, 44, 0.1)",
-                paddingHorizontal: 8,
-                paddingVertical: 2,
+                fontSize: 10,
+                fontWeight: "700",
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
               },
             ]}
+            numberOfLines={1}
           >
-            <Text
-              style={[
-                ...s("text-cocoa"),
-                {
-                  fontSize: 10,
-                  fontWeight: "700",
-                  textTransform: "uppercase",
-                  letterSpacing: 0.5,
-                },
-              ]}
-            >
-              {redemption.context}
-            </Text>
-          </View>
+            {redemption.context}
+          </Text>
         </View>
       </View>
 
@@ -374,18 +405,14 @@ function RedemptionRow({ redemption }: { redemption: Redemption }) {
         <Text style={[...s("text-spark"), { fontSize: 16, fontWeight: "700" }]}>
           +€{formatEuro(redemption.cashback)}
         </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
-          <SymbolView
-            name="clock"
-            size={11}
-            tintColor="#737373"
-            weight="medium"
-            style={{ marginRight: 3 }}
-          />
-          <Text style={[...s("text-neutral-600"), { fontSize: 11 }]}>
-            {redemption.date}
-          </Text>
-        </View>
+        <Text
+          style={[
+            ...s("text-neutral-600"),
+            { fontSize: 11, marginTop: 2 },
+          ]}
+        >
+          {redemption.date}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -403,9 +430,9 @@ function MerchantPhoto({ uri }: { uri: string }) {
     return (
       <View
         style={{
-          width: 56,
-          height: 56,
-          borderRadius: 12,
+          width: 44,
+          height: 44,
+          borderRadius: 10,
           backgroundColor: "rgba(23, 18, 15, 0.08)",
         }}
       />
@@ -417,10 +444,67 @@ function MerchantPhoto({ uri }: { uri: string }) {
       source={{ uri }}
       onError={() => setFailed(true)}
       style={{
-        width: 56,
-        height: 56,
-        borderRadius: 12,
+        width: 44,
+        height: 44,
+        borderRadius: 10,
         backgroundColor: "rgba(23, 18, 15, 0.06)",
+      }}
+    />
+  );
+}
+
+// ── primitives (mirror SettingsScreen so the two surfaces feel identical) ───
+
+function SectionHeader({ children }: { children: string }) {
+  return (
+    <Text
+      style={[
+        ...s("text-xs font-bold uppercase text-cocoa tracking-[1px]"),
+        { marginTop: 24, marginBottom: 8, paddingHorizontal: 4 },
+      ]}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function SectionFooter({ children }: { children: string }) {
+  return (
+    <Text
+      style={[
+        ...s("text-xs text-neutral-600"),
+        { marginTop: 8, paddingHorizontal: 4, lineHeight: 16 },
+      ]}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function GroupedSection({ children }: { children: ReactNode }) {
+  return (
+    <View
+      style={[
+        ...s("rounded-2xl bg-white"),
+        {
+          borderWidth: 1,
+          borderColor: "rgba(23, 18, 15, 0.06)",
+          overflow: "hidden",
+        },
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+function RowSeparator() {
+  return (
+    <View
+      style={{
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: "rgba(23, 18, 15, 0.08)",
+        marginLeft: 16,
       }}
     />
   );
