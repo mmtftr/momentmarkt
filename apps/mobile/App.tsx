@@ -36,6 +36,7 @@ import { RedeemFlow } from "./src/components/RedeemFlow";
 import { WalletSheetContent } from "./src/components/WalletSheetContent";
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
 import type { MerchantListItem } from "./src/lib/api";
+import { useSignals } from "./src/lib/useSignals";
 import { cityProfiles, type DemoCityId, type DemoCityProfile } from "./src/demo/cityProfiles";
 import { miaRainOffer } from "./src/demo/miaOffer";
 import { demoWidgetSpecs } from "./src/demo/widgetSpecs";
@@ -131,6 +132,10 @@ export default function App() {
   const animatedIndex = useSharedValue(0);
 
   const cityProfile = cityProfiles[city];
+  // Issue #124: live weather + pulse strings sourced from the FastAPI
+  // `/signals/{city}` endpoint, with a deterministic per-city fallback so
+  // the demo recording survives an unreachable Hugging Face Space.
+  const citySignals = useSignals(city);
   const surfacing = useMemo(
     () => scoreSurfacing({ ...cityProfile.surfacingInput, highIntent }),
     [cityProfile, highIntent],
@@ -220,6 +225,15 @@ export default function App() {
 
   const handleSheetChange = useCallback((index: number) => {
     setSheetIndex(index);
+  }, []);
+
+  // Issue #125: tapping the search input inside the wallet drawer's
+  // "Offers for you" surface auto-snaps the bottom sheet to its top snap
+  // (index 2 — 80%) so the keyboard rises into a fully-revealed list
+  // instead of cropping it at whatever snap the user was at. `sheetRef`
+  // is a ref (stable identity) so the dep array stays empty.
+  const handleSearchFocus = useCallback(() => {
+    sheetRef.current?.snapToIndex(2);
   }, []);
 
   // Issue #119: handleOpenDevPanel removed — the MapTopChip was the last
@@ -397,11 +411,15 @@ export default function App() {
           highIntent={highIntent}
           aggressiveHeadline={aggressiveHeadline}
           animatedIndex={animatedIndex}
+          tempC={citySignals.tempC}
+          weatherLabel={citySignals.weatherLabel}
+          pulseLabel={citySignals.pulseLabel}
           onWidgetVariantChange={setWidgetVariant}
           onWidgetCta={handleAdvanceFromOffer}
           onRedeemComplete={handleRedeemComplete}
           onSuccessDone={handleResetToSilent}
           onMerchantTap={handleMerchantTap}
+          onSearchFocus={handleSearchFocus}
         />
       </BottomSheet>
 
@@ -488,9 +506,9 @@ export default function App() {
                 >
                   <Animated.View style={topOverlayLeftStyle}>
                     <MapWeatherPill
-                      tempC={city === "berlin" ? 11 : 14}
+                      tempC={citySignals.tempC}
                       neighborhood={city === "berlin" ? "Mitte" : "HB"}
-                      sfSymbol={city === "berlin" ? "cloud.heavyrain.fill" : "sun.max.fill"}
+                      sfSymbol={citySignals.weatherSfSymbol}
                     />
                   </Animated.View>
                   <Animated.View style={[topOverlayRightStyle, ...s("flex-row gap-2")]}>
@@ -633,6 +651,15 @@ type SheetBodyProps = {
   highIntent: boolean;
   aggressiveHeadline: string | null;
   animatedIndex: ReturnType<typeof useSharedValue<number>>;
+  /**
+   * Live (or fallback) weather strings sourced from `useSignals(city)` in
+   * App() and threaded through to the silent-step WalletSheetContent. Issue
+   * #124. SheetBody is a pure pass-through — the hook + fetch contract live
+   * one level up so this component stays test-friendly.
+   */
+  tempC: number;
+  weatherLabel: string;
+  pulseLabel: string;
   onWidgetVariantChange: (variant: WidgetVariant) => void;
   onWidgetCta: () => void;
   onRedeemComplete: () => void;
@@ -648,6 +675,9 @@ function SheetBody({
   highIntent,
   aggressiveHeadline,
   animatedIndex,
+  tempC,
+  weatherLabel,
+  pulseLabel,
   onWidgetVariantChange,
   onWidgetCta,
   onRedeemComplete,
@@ -744,13 +774,9 @@ function SheetBody({
     <WalletSheetContent
       cityLabel={cityProfile.cityLabel}
       citySlug={city}
-      tempC={city === "berlin" ? 11 : 14}
-      weatherLabel={
-        city === "berlin"
-          ? "overcast • rain in ~22 min"
-          : "clear • light breeze"
-      }
-      pulseLabel={city === "berlin" ? "Rain in ~22 min" : "Clear · light breeze"}
+      tempC={tempC}
+      weatherLabel={weatherLabel}
+      pulseLabel={pulseLabel}
       animatedIndex={animatedIndex}
       onMerchantTap={onMerchantTap}
     />

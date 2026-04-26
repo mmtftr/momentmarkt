@@ -14,6 +14,8 @@
  *   - falls back to the live Hugging Face Spaces deploy
  */
 
+import type { SFSymbol } from "sf-symbols-typescript";
+
 const DEFAULT_API_URL = "https://peaktwilight-momentmarkt-api.hf.space";
 
 export function apiBase(): string {
@@ -208,6 +210,115 @@ export async function fetchMerchants(
       query: typeof data.query === "string" ? data.query : null,
       count: data.count,
       merchants,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compact, mobile-shaped view of `GET /signals/{city}` (issue #124).
+ *
+ * The backend returns a deeply nested context object (weather + event + merchant
+ * + trigger_evaluation + privacy + …). The mobile UI only needs three strings
+ * and one icon for the silent-step weather pill / wallet weather card. This
+ * type is the consistent shape the rest of the app speaks; the field-name
+ * translation from the backend payload happens inside `fetchSignals` so
+ * upstream code stays dumb.
+ */
+export type CitySignals = {
+  city: string;
+  /** Integer °C, suitable for `Math.round` consumers. */
+  tempC: number;
+  /** Short condition phrase, e.g. "overcast • rain in ~22 min". */
+  weatherLabel: string;
+  /** Short hero phrase used by the wallet pulse chip. */
+  pulseLabel: string;
+  /** Pre-derived SF Symbol so App.tsx wiring stays a one-liner. */
+  weatherSfSymbol: SFSymbol;
+};
+
+/** Map a backend `weather.trigger` string to an SF Symbol glyph. */
+function triggerToSfSymbol(trigger: string | undefined): SFSymbol {
+  switch ((trigger ?? "").toLowerCase()) {
+    case "rain_incoming":
+    case "rain":
+    case "drizzle":
+    case "shower":
+    case "overcast":
+    case "cloudy":
+      return "cloud.heavyrain.fill";
+    default:
+      return "sun.max.fill";
+  }
+}
+
+/** Translate a backend trigger + summary into the short labels the UI shows. */
+function triggerToLabels(
+  trigger: string | undefined,
+  summary: string | undefined,
+): { weatherLabel: string; pulseLabel: string } {
+  const t = (trigger ?? "").toLowerCase();
+  if (t === "rain_incoming") {
+    return {
+      weatherLabel: "overcast • rain in ~22 min",
+      pulseLabel: "Rain in ~22 min",
+    };
+  }
+  if (t === "clear") {
+    return {
+      weatherLabel: "clear • light breeze",
+      pulseLabel: "Clear · light breeze",
+    };
+  }
+  // Generic fallback: surface the backend's own summary line, with a
+  // best-effort short pulse label so the UI never renders an empty string.
+  const fallbackSummary = summary && summary.length > 0 ? summary : "live conditions";
+  return {
+    weatherLabel: fallbackSummary.toLowerCase(),
+    pulseLabel: fallbackSummary,
+  };
+}
+
+/**
+ * Fetch the live signal context for a city and project it down to the small
+ * `CitySignals` shape the mobile UI consumes. Returns `null` on any failure
+ * (network, non-2xx, malformed payload) so callers (`useSignals`) can layer
+ * the deterministic fallback on top — keeping the demo recordable when the
+ * Hugging Face Space is asleep / unreachable.
+ */
+export async function fetchSignals(
+  city: string,
+  signal?: AbortSignal,
+): Promise<CitySignals | null> {
+  try {
+    const r = await fetch(
+      `${apiBase()}/signals/${encodeURIComponent(city)}`,
+      { signal },
+    );
+    if (!r.ok) return null;
+    const data = (await r.json()) as Record<string, unknown>;
+    const weather = data.weather as Record<string, unknown> | undefined;
+    const current = weather?.current as Record<string, unknown> | undefined;
+    const tempRaw = current?.temperature_2m;
+    const trigger =
+      typeof weather?.trigger === "string" ? (weather.trigger as string) : undefined;
+    const summary =
+      typeof weather?.summary === "string" ? (weather.summary as string) : undefined;
+    if (typeof tempRaw !== "number" || !Number.isFinite(tempRaw)) return null;
+    const cityId =
+      typeof data.city_id === "string"
+        ? (data.city_id as string)
+        : typeof data.city === "string"
+          ? (data.city as string).toLowerCase()
+          : city;
+    const labels = triggerToLabels(trigger, summary);
+    return {
+      city: cityId,
+      tempC: Math.round(tempRaw),
+      weatherLabel: labels.weatherLabel,
+      pulseLabel: labels.pulseLabel,
+      weatherSfSymbol: triggerToSfSymbol(trigger),
     };
   } catch {
     return null;
