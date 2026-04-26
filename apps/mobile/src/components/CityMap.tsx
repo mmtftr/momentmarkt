@@ -1,3 +1,4 @@
+import { SymbolView } from "expo-symbols";
 import type { JSX } from "react";
 import { useEffect } from "react";
 import {
@@ -16,6 +17,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { categoryToIcon, type CategoryIcon } from "../lib/categoryIcon";
 import { s } from "../styles";
 
 export type MerchantCategory =
@@ -94,18 +96,9 @@ type Props = {
 // Mirrors `colors.spark` so the highlighted pin reads as MomentMarkt-red.
 const SPARK_RED = "#f2542d";
 
-// Category → emoji glyph used inside the marker bubble. Keep this list in
-// sync with `MerchantCategory`. Anything missing falls back to the
-// generic pin so a future category never crashes the marker view.
-const CATEGORY_GLYPH: Record<MerchantCategory, string> = {
-  cafe: "☕",
-  bakery: "🥨",
-  bookstore: "📚",
-  fitness: "🏃",
-  kiosk: "📰",
-  supermarket: "🛒",
-  default: "📍",
-};
+// Category → SF Symbol mapping lives in `lib/categoryIcon.ts` so the
+// CityMap markers, the wallet drawer's MerchantSearchList avatars, and
+// any future merchant surface share one icon vocabulary (issue #121).
 
 // Berlin Mitte fallback pin set: one highlighted Cafe Bondi plus a few
 // muted partner pins so the map has a visible city texture even when the
@@ -215,7 +208,9 @@ function MerchantMarker({
   onOfferPress?: (pinId: string) => void;
 }): JSX.Element {
   const isHighlighted = Boolean(pin.highlighted);
-  const glyph = CATEGORY_GLYPH[pin.category ?? "default"] ?? CATEGORY_GLYPH.default;
+  // SF Symbol vocabulary lives in `lib/categoryIcon.ts` so the map pin
+  // glyph stays in sync with the wallet drawer's MerchantSearchList row.
+  const icon = categoryToIcon(pin.category ?? "default");
   const hasOffer = Boolean(pin.offer);
 
   return (
@@ -236,11 +231,19 @@ function MerchantMarker({
       opacity={isHighlighted ? 1 : 0.92}
     >
       {isHighlighted ? (
-        <HighlightedMerchantMarker glyph={glyph} />
+        <HighlightedMerchantMarker icon={icon} />
       ) : (
         <View style={markerStyles.bubbleWrap}>
           <View style={markerStyles.normal}>
-            <Text style={markerStyles.normalGlyph}>{glyph}</Text>
+            {/* SF Symbol glyph rendered in cocoa/rain/spark tint so the
+                pin reads as a native Apple Maps category chip. */}
+            <SymbolView
+              name={icon.sfSymbol}
+              tintColor={icon.tintColor}
+              size={16}
+              weight="semibold"
+              style={markerStyles.normalSymbol}
+            />
           </View>
         </View>
       )}
@@ -315,7 +318,11 @@ function OfferCallout({
  * the #31 motion preserved verbatim, just wrapped around the new
  * branded bubble instead of the bare dot.
  */
-function HighlightedMerchantMarker({ glyph }: { glyph: string }): JSX.Element {
+function HighlightedMerchantMarker({
+  icon,
+}: {
+  icon: CategoryIcon;
+}): JSX.Element {
   const pulse = useSharedValue(0);
 
   useEffect(() => {
@@ -342,7 +349,17 @@ function HighlightedMerchantMarker({ glyph }: { glyph: string }): JSX.Element {
         style={[markerStyles.halo, haloStyle]}
       />
       <View style={markerStyles.highlighted}>
-        <Text style={markerStyles.highlightedGlyph}>{glyph}</Text>
+        {/* The hero pin sits on a spark-red bubble, so we force the
+            glyph tint to white instead of the per-category color used by
+            the muted markers — keeps Cafe Bondi reading as the brand
+            accent rather than a coffee-cocoa swatch. */}
+        <SymbolView
+          name={icon.sfSymbol}
+          tintColor="#ffffff"
+          size={22}
+          weight="semibold"
+          style={markerStyles.highlightedSymbol}
+        />
       </View>
     </View>
   );
@@ -374,9 +391,9 @@ const markerStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1.5 },
     elevation: 2,
   },
-  normalGlyph: {
-    fontSize: 14,
-    lineHeight: 16,
+  normalSymbol: {
+    width: 18,
+    height: 18,
   },
   highlightedWrap: {
     alignItems: "center",
@@ -406,9 +423,9 @@ const markerStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 6,
   },
-  highlightedGlyph: {
-    fontSize: 20,
-    lineHeight: 22,
+  highlightedSymbol: {
+    width: 24,
+    height: 24,
   },
 });
 

@@ -123,7 +123,14 @@ export type MerchantListItem = {
   display_name: string;
   /** cafe | bakery | bookstore | kiosk | restaurant | bar | boutique | ice_cream | florist */
   category: string;
-  emoji: string;
+  /**
+   * Legacy emoji glyph — still part of the backend `/merchants/{city}`
+   * contract so we keep accepting it on the wire. The mobile UI no longer
+   * renders it (issue #121 swapped to SF Symbols via `categoryToIcon()`),
+   * which is why this field is optional client-side: callers and offline
+   * fixtures are free to omit it without breaking compilation.
+   */
+  emoji?: string;
   distance_m: number;
   neighborhood: string;
   active_offer: ActiveOffer | null;
@@ -166,11 +173,13 @@ export async function fetchMerchants(
     const merchants: MerchantListItem[] = data.merchants
       .filter(
         (m): m is MerchantListItem =>
+          // `emoji` is intentionally not asserted here — issue #121 made
+          // it optional on the client (SF Symbols replaced the glyph) so
+          // the backend payload stays valid even if it omits the field.
           !!m &&
           typeof (m as MerchantListItem).id === "string" &&
           typeof (m as MerchantListItem).display_name === "string" &&
           typeof (m as MerchantListItem).category === "string" &&
-          typeof (m as MerchantListItem).emoji === "string" &&
           typeof (m as MerchantListItem).distance_m === "number" &&
           typeof (m as MerchantListItem).neighborhood === "string",
       )
@@ -178,7 +187,7 @@ export async function fetchMerchants(
         id: m.id,
         display_name: m.display_name,
         category: m.category,
-        emoji: m.emoji,
+        emoji: typeof m.emoji === "string" ? m.emoji : undefined,
         distance_m: m.distance_m,
         neighborhood: m.neighborhood,
         active_offer:

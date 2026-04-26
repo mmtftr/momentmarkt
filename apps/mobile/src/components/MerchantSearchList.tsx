@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { fetchMerchants, type MerchantListItem } from "../lib/api";
+import { categoryToIcon } from "../lib/categoryIcon";
 import { lightTap } from "../lib/haptics";
 import { s } from "../styles";
 
@@ -181,6 +182,9 @@ function MerchantCard({
   merchant: MerchantListItem;
   onPress: () => void;
 }) {
+  // SF Symbol vocabulary lives in `lib/categoryIcon.ts` so the wallet
+  // drawer's avatar circles share glyph + tint with the CityMap markers.
+  const icon = categoryToIcon(merchant.category);
   return (
     <Pressable
       accessibilityRole="button"
@@ -195,7 +199,9 @@ function MerchantCard({
         },
       ]}
     >
-      {/* Emoji avatar — cream-tinted circle keeps the card from feeling flat. */}
+      {/* SF Symbol avatar — cream-tinted circle keeps the card from feeling
+          flat. The 36pt wrapper stays; only the glyph swapped from emoji to
+          a category-tinted SymbolView so the row reads as native iOS. */}
       <View
         style={[
           ...s("rounded-full items-center justify-center mr-3"),
@@ -208,7 +214,13 @@ function MerchantCard({
           },
         ]}
       >
-        <Text style={{ fontSize: 18, lineHeight: 20 }}>{merchant.emoji}</Text>
+        <SymbolView
+          name={icon.sfSymbol}
+          tintColor={icon.tintColor}
+          size={18}
+          weight="semibold"
+          style={{ width: 20, height: 20 }}
+        />
       </View>
 
       <View style={s("flex-1")}>
@@ -277,7 +289,6 @@ const OFFLINE_FALLBACK_MERCHANTS: MerchantListItem[] = [
     id: "berlin-mitte-cafe-bondi",
     display_name: "Cafe Bondi",
     category: "cafe",
-    emoji: "☕️",
     distance_m: 82,
     neighborhood: "Mitte",
     active_offer: {
@@ -290,7 +301,6 @@ const OFFLINE_FALLBACK_MERCHANTS: MerchantListItem[] = [
     id: "berlin-mitte-baeckerei-rosenthal",
     display_name: "Bäckerei Rosenthal",
     category: "bakery",
-    emoji: "🥐",
     distance_m: 128,
     neighborhood: "Mitte",
     active_offer: {
@@ -303,7 +313,6 @@ const OFFLINE_FALLBACK_MERCHANTS: MerchantListItem[] = [
     id: "berlin-mitte-kiezbuchhandlung-august",
     display_name: "Kiezbuchhandlung August",
     category: "bookstore",
-    emoji: "📚",
     distance_m: 356,
     neighborhood: "Mitte",
     active_offer: null,
@@ -312,7 +321,6 @@ const OFFLINE_FALLBACK_MERCHANTS: MerchantListItem[] = [
     id: "berlin-mitte-eisgarten-weinmeister",
     display_name: "Eisgarten Weinmeister",
     category: "ice_cream",
-    emoji: "🍦",
     distance_m: 545,
     neighborhood: "Mitte",
     active_offer: null,
