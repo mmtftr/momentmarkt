@@ -24,6 +24,12 @@
 import { SymbolView } from "expo-symbols";
 import { type ReactElement, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { lightTap } from "../lib/haptics";
@@ -34,6 +40,8 @@ type Props = {
   passes: SavedPass[];
   /** Tap a pass → commit to the redeem flow with that variant. */
   onPassTap: (pass: SavedPass) => void;
+  /** Swipe-left Delete action → remove this saved pass. */
+  onPassDelete: (pass: SavedPass) => void;
   /** "Discover more" link → switches the active tab back to Discover. */
   onGoToDiscover: () => void;
 };
@@ -41,6 +49,7 @@ type Props = {
 export function WalletView({
   passes,
   onPassTap,
+  onPassDelete,
   onGoToDiscover,
 }: Props): ReactElement {
   const insets = useSafeAreaInsets();
@@ -97,7 +106,11 @@ export function WalletView({
               key={pass.id}
               style={{ marginBottom: idx === passes.length - 1 ? 0 : 12 }}
             >
-              <SavedPassCard pass={pass} onTap={() => onPassTap(pass)} />
+              <SavedPassCard
+                pass={pass}
+                onTap={() => onPassTap(pass)}
+                onDelete={() => onPassDelete(pass)}
+              />
             </View>
           ))}
         </ScrollView>
@@ -171,6 +184,12 @@ function WalletEmptyState({
 }
 
 const ROW_HEIGHT = 120;
+const DELETE_REVEAL_WIDTH = 88;
+const DELETE_SPRING = {
+  damping: 18,
+  stiffness: 240,
+  mass: 0.8,
+} as const;
 
 /**
  * Single saved-pass row.
@@ -189,36 +208,103 @@ const ROW_HEIGHT = 120;
 function SavedPassCard({
   pass,
   onTap,
+  onDelete,
 }: {
   pass: SavedPass;
   onTap: () => void;
+  onDelete: () => void;
 }): ReactElement {
   const [imgFailed, setImgFailed] = useState(false);
   const photoUrl = extractPhotoUrl(pass.variant.widget_spec);
   const expiryLabel = formatExpiryLabel(pass.expires_at_iso);
+  const translateX = useSharedValue(0);
+
+  const cardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const pan = Gesture.Pan()
+    .activeOffsetX([-12, 12])
+    .failOffsetY([-12, 12])
+    .onUpdate((event) => {
+      translateX.value = Math.max(
+        -DELETE_REVEAL_WIDTH,
+        Math.min(0, event.translationX),
+      );
+    })
+    .onEnd((event) => {
+      const shouldOpen =
+        event.translationX < -DELETE_REVEAL_WIDTH * 0.45 || event.velocityX < -500;
+      translateX.value = withSpring(
+        shouldOpen ? -DELETE_REVEAL_WIDTH : 0,
+        DELETE_SPRING,
+      );
+    });
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${pass.variant.merchant_display_name} — ${pass.variant.discount_label}. Tap to redeem.`}
-      onPress={() => {
-        lightTap();
-        onTap();
-      }}
-      style={({ pressed }) => [
-        ...s("flex-row rounded-2xl bg-white"),
-        {
-          height: ROW_HEIGHT,
-          padding: 12,
-          borderWidth: 1,
-          borderColor: "rgba(23, 18, 15, 0.08)",
-          opacity: pressed ? 0.85 : 1,
-          shadowColor: "#17120f",
-          shadowOpacity: 0.06,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-        },
-      ]}
-    >
+    <View style={{ height: ROW_HEIGHT, overflow: "hidden", borderRadius: 18 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${pass.variant.merchant_display_name}`}
+        onPress={() => {
+          lightTap();
+          onDelete();
+        }}
+        style={({ pressed }) => [
+          {
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: DELETE_REVEAL_WIDTH,
+            borderTopRightRadius: 18,
+            borderBottomRightRadius: 18,
+            backgroundColor: "#f2542d",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.75 : 1,
+          },
+        ]}
+      >
+        <SymbolView
+          name="trash.fill"
+          tintColor="#ffffff"
+          size={20}
+          weight="semibold"
+          style={{ width: 22, height: 22, marginBottom: 5 }}
+        />
+        <Text style={s("text-[11px] font-black uppercase tracking-[1px] text-white")}>
+          Delete
+        </Text>
+      </Pressable>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={cardStyle}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${pass.variant.merchant_display_name} — ${pass.variant.discount_label}. Tap to redeem.`}
+            onPress={() => {
+              lightTap();
+              translateX.value = withSpring(0, DELETE_SPRING);
+              onTap();
+            }}
+            onLongPress={() => {
+              translateX.value = withSpring(-DELETE_REVEAL_WIDTH, DELETE_SPRING);
+            }}
+            style={({ pressed }) => [
+              ...s("flex-row rounded-2xl bg-white"),
+              {
+                height: ROW_HEIGHT,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: "rgba(23, 18, 15, 0.08)",
+                opacity: pressed ? 0.85 : 1,
+                shadowColor: "#17120f",
+                shadowOpacity: 0.06,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 2 },
+              },
+            ]}
+          >
       {photoUrl && !imgFailed ? (
         <Image
           source={{ uri: photoUrl }}
@@ -336,7 +422,10 @@ function SavedPassCard({
           </Text>
         </View>
       </View>
-    </Pressable>
+          </Pressable>
+        </Animated.View>
+      </GestureDetector>
+    </View>
   );
 }
 

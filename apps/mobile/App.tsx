@@ -420,6 +420,11 @@ export default function App() {
     setStep("offer");
   }, []);
 
+  const handleDeletePass = useCallback((pass: SavedPass) => {
+    lightTap();
+    setSavedPasses((prev) => prev.filter((p) => p.id !== pass.id));
+  }, []);
+
   // Issue #160 — merchant-first Browse handlers. Tapping a merchant in
   // the Browse list opens the slide-in detail view (cream overlay,
   // hero photo, info row, active offer card). The detail view is a
@@ -942,6 +947,7 @@ export default function App() {
                   <WalletView
                     passes={activeSavedPasses}
                     onPassTap={handleRedeemPass}
+                    onPassDelete={handleDeletePass}
                     onGoToDiscover={handleGoToDiscover}
                   />
                 </View>
