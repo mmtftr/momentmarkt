@@ -1,6 +1,6 @@
 import { SymbolView } from "expo-symbols";
 import type { JSX } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   type StyleProp,
   StyleSheet,
@@ -156,6 +156,19 @@ export function CityMap({
     longitudeDelta: 0.015,
   };
 
+  // Imperative re-center on city swap. `initialRegion` is set once at
+  // mount; without this useEffect the map stays on the original city's
+  // bbox even when the parent passes new lat/lng. 600ms feels right —
+  // long enough to read as a "fly-to" motion, short enough that the
+  // demo cut doesn't drag.
+  const mapRef = useRef<MapView | null>(null);
+  useEffect(() => {
+    mapRef.current?.animateToRegion(region, 600);
+    // Disable exhaustive-deps — animating on lat/lng change only; the
+    // delta values are constant and shouldn't re-trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerLat, centerLng]);
+
   const wrapperStyle: StyleProp<ViewStyle> = style
     ? [{ overflow: "hidden" }, style]
     : [
@@ -170,6 +183,7 @@ export function CityMap({
   return (
     <View style={wrapperStyle}>
       <MapView
+        ref={mapRef}
         provider={PROVIDER_DEFAULT}
         style={{ width: "100%", height: "100%" }}
         initialRegion={region}
