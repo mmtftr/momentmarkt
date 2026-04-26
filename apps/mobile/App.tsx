@@ -535,13 +535,28 @@ export default function App() {
   // render only when active and a fade-out beat to a static list feels
   // laggy. The cross-fade keeps the demo cut from #152 (Discover + Browse
   // remain mounted across switches so their fetch state stays hot).
+  // When the user navigates between non-cross-fade tabs (e.g. Wallet→
+  // History), viewFade snaps instantly without animating so the brief
+  // intermediate frame doesn't show the wrong cross-fade target.
   const viewFade = useSharedValue(viewMode === "discover" ? 0 : 1);
   useEffect(() => {
-    if (viewMode === "discover" || viewMode === "browse") {
-      viewFade.value = withTiming(viewMode === "browse" ? 1 : 0, {
+    if (viewMode === "discover") {
+      viewFade.value = withTiming(0, {
         duration: 250,
         easing: Easing.out(Easing.exp),
       });
+    } else if (viewMode === "browse") {
+      viewFade.value = withTiming(1, {
+        duration: 250,
+        easing: Easing.out(Easing.exp),
+      });
+    } else {
+      // Tabs that overlay browse (Wallet / History / Settings): pin
+      // viewFade at 1 so the underlying Browse keeps its full-opacity
+      // state (the overlay tab is opaque cream so the Browse content
+      // is hidden anyway, but a snap to 0 here would cause a flicker
+      // when the user navigates Wallet → Discover).
+      viewFade.value = 1;
     }
   }, [viewMode, viewFade]);
   const discoverFadeStyle = useAnimatedStyle(() => ({
