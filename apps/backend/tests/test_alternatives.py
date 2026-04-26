@@ -674,6 +674,102 @@ def test_time_bucket_for_hour_maps_demo_clock() -> None:
     }
 
 
+# ---------------------------------------------------------------------------
+# Issue #156 — is_special_surface flag for the "⚡ Just for you" UI badge
+# ---------------------------------------------------------------------------
+#
+# The mobile reads `is_special_surface` to decide whether to overlay a
+# "⚡ JUST FOR YOU" pill on the top swipe card AND pulse a notification
+# dot on the Discover tab when a fresh special lands while the user is
+# elsewhere. The contract: every fresh fetch's first variant carries
+# `is_special_surface=True`; the rest carry False. Anchored builds set
+# the flag on the anchor (position 0); lens builds set it on the top of
+# the post-sort, post-seen-filter pool.
+
+
+def test_is_special_surface_set_on_first_variant_anchored() -> None:
+    """Anchored fetch — the anchor IS the special card."""
+    response = client.post(
+        "/offers/alternatives",
+        json={"merchant_id": "berlin-mitte-cafe-bondi", "n": 3},
+    )
+    assert response.status_code == 200
+    variants = response.json()["variants"]
+    assert len(variants) >= 1
+    assert variants[0]["is_special_surface"] is True
+    # And the anchor IS the first variant — keeps the contract aligned.
+    assert variants[0]["is_anchor"] is True
+
+
+def test_is_special_surface_unset_on_subsequent_variants_anchored() -> None:
+    """Only ONE special-surface card per fresh fetch — variants 2..N
+    must all carry False so the mobile never paints two pills at once."""
+    response = client.post(
+        "/offers/alternatives",
+        json={"merchant_id": "berlin-mitte-cafe-bondi", "n": 3},
+    )
+    assert response.status_code == 200
+    variants = response.json()["variants"]
+    assert len(variants) >= 2
+    for v in variants[1:]:
+        assert v["is_special_surface"] is False, (
+            f"only the top card may be special; got flag on {v['merchant_id']}"
+        )
+
+
+def test_is_special_surface_set_on_first_variant_lens() -> None:
+    """Lens-driven (no anchor) — the top-of-pool card claims the flag."""
+    for lens in ("for_you", "best_deals", "right_now", "nearby"):
+        response = client.post(
+            "/offers/alternatives",
+            json={"lens": lens, "city": "berlin", "n": 3},
+        )
+        assert response.status_code == 200, f"lens={lens} failed"
+        variants = response.json()["variants"]
+        if not variants:
+            continue
+        assert variants[0]["is_special_surface"] is True, (
+            f"lens={lens}: top card must be flagged is_special_surface"
+        )
+        for v in variants[1:]:
+            assert v["is_special_surface"] is False, (
+                f"lens={lens}: only one special card per fetch; "
+                f"got flag on {v['merchant_id']}"
+            )
+
+
+def test_is_special_surface_rotates_with_seen_set() -> None:
+    """Rotated fetch — the new top-of-pool card claims the flag.
+    Replaying the seen-set gives a different top card; the special
+    flag must follow the new top-of-pool, not stick to the old id."""
+    first = client.post(
+        "/offers/alternatives",
+        json={"lens": "best_deals", "city": "berlin", "n": 3},
+    )
+    assert first.status_code == 200
+    first_variants = first.json()["variants"]
+    assert len(first_variants) >= 1
+    assert first_variants[0]["is_special_surface"] is True
+    first_ids = [v["merchant_id"] for v in first_variants]
+
+    second = client.post(
+        "/offers/alternatives",
+        json={
+            "lens": "best_deals",
+            "city": "berlin",
+            "n": 3,
+            "seen_variant_ids": first_ids,
+        },
+    )
+    assert second.status_code == 200
+    second_variants = second.json()["variants"]
+    assert len(second_variants) >= 1
+    # Different top card after rotation.
+    assert second_variants[0]["merchant_id"] not in first_ids
+    # …and that new top card claims the special flag.
+    assert second_variants[0]["is_special_surface"] is True
+
+
 def test_preference_context_reorders_candidates_anchor_pinned() -> None:
     """Sending prior-swipe history with `use_llm=False` exercises the
     deterministic heuristic re-rank. The anchor stays at position 0."""

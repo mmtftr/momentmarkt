@@ -645,6 +645,13 @@ class AlternativeOffer(BaseModel):
     merchant identity so the mobile knows WHICH merchant the user picked
     once they swipe right (and so the round's `PriorSwipe` log can be
     fed back as `preference_context` next round).
+
+    Issue #156: ``is_special_surface`` is the per-card flag the mobile
+    reads to decide whether to overlay a "⚡ Just for you" pill on the
+    photo. Set ``True`` on the first variant of every fresh fetch
+    (anchor on the merchant-tap path, top-of-pool on the lens paths)
+    and ``False`` on the rest. Optional on the wire — defaults to
+    ``False`` so older clients that don't read it still parse cleanly.
     """
 
     variant_id: str
@@ -657,6 +664,7 @@ class AlternativeOffer(BaseModel):
     discount_pct: float
     discount_label: str
     widget_spec: dict[str, Any]
+    is_special_surface: bool = False
 
 
 class AlternativesResponse(BaseModel):

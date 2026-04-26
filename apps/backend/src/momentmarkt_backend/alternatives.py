@@ -661,6 +661,12 @@ def build_alternatives_with_meta(
                 "discount_pct": pct,
                 "discount_label": label,
                 "widget_spec": widget_spec,
+                # Issue #156: the first card of every fresh fetch is the
+                # "special surface" — the mobile overlays a "⚡ Just for
+                # you" pill on it and pulses a dot on the Discover tab
+                # if the user isn't already there. On the anchored
+                # (merchant-tap) path the anchor IS that card.
+                "is_special_surface": position == 0,
             }
         )
     return {
@@ -698,6 +704,11 @@ def _build_variant_dict(
         "discount_pct": pct,
         "discount_label": label,
         "widget_spec": widget_spec,
+        # Issue #156: default False — caller (the lens builder) flips
+        # the top-of-pool card's flag to True after the list is sorted.
+        # Anchored builds set the flag inline because the anchor is
+        # known at construction time.
+        "is_special_surface": False,
     }
 
 
@@ -857,6 +868,12 @@ def build_alternatives_for_lens_with_meta(
         _build_variant_dict(merchant=m, is_anchor=False)
         for m in filtered_pool[:safe_n]
     ]
+    # Issue #156: the first variant of every fresh fetch is the
+    # "special surface". On the lens paths there's no anchor, so
+    # the top-of-pool card claims the flag. Empty `variants` (the
+    # exhausted end-state) gets no flag at all.
+    if variants:
+        variants[0]["is_special_surface"] = True
     return {
         "variants": variants,
         "total_candidates": total_candidates,
