@@ -119,8 +119,15 @@ export function NativeTabBar({
         renderScene={({ route }) =>
           (children[route.key] ?? null) as ReactElement | null
         }
+        // Cream/cocoa palette to match Settings + History (the rest of the
+        // app's primary surfaces). Active tint stays spark so the selected
+        // icon reads as the brand accent. Translucent UITabBar over the
+        // cream tint gives the same frosted-cream material the Settings
+        // header uses, so the bar never looks out of place when the dark
+        // wallet sheet (Home tab) extends behind it.
+        tabBarStyle={{ backgroundColor: "#fff8ee" }}
         tabBarActiveTintColor="#f2542d"
-        tabBarInactiveTintColor="#737373"
+        tabBarInactiveTintColor="#6f3f2c"
         sidebarAdaptable={false}
         hapticFeedbackEnabled
       />

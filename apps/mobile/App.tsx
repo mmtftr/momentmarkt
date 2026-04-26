@@ -368,18 +368,18 @@ export default function App() {
           section (#80). The MapTopChip above is still a contextual quick
           path into the DevPanelOverlay during the silent Home beat. */}
 
-      {/* Bottom sheet wallet drawer. iOS pushes the UITabBarController's
-          height into the scene's safe-area `bottom` inset, so passing
-          `insets.bottom` as bottomInset already clears both the tab bar
-          and the home indicator — the lowest snap (25%) lands flush
-          against the tab bar's top edge without double-counting. */}
+      {/* Bottom sheet wallet drawer. `bottomInset={0}` lets the sheet
+          extend all the way to the screen bottom, so the cream
+          UITabBarController sits in front of the dark sheet — the
+          wallet visually flows under the tab bar instead of hovering
+          above it (Apple Music / Apple Maps pattern). */}
       <BottomSheet
         ref={sheetRef}
         index={0}
         snapPoints={SHEET_SNAP_POINTS as unknown as string[]}
         animatedIndex={animatedIndex}
         onChange={handleSheetChange}
-        bottomInset={Math.max(insets.bottom, 8)}
+        bottomInset={0}
         // Issue #100: respect the safe-area top so the 80% snap doesn't
         // collide with the iOS status bar / Dynamic Island. gorhom's
         // `topInset` is the floor distance the sheet keeps from the top
