@@ -119,7 +119,7 @@ async def rerank_candidates(
     candidates: list[dict[str, Any]],
     history: list[PriorSwipe],
     catalog_lookup: dict[str, dict[str, Any]],
-    use_llm: bool = True,
+    use_llm: bool | None = None,
 ) -> list[str]:
     """Re-rank ``candidates`` by inferred preference, anchor first.
 
@@ -127,7 +127,16 @@ async def rerank_candidates(
     Empty history short-circuits to the input order (the deterministic
     distance-sort already applied by `build_alternatives`). LLM
     failures fall back to the deterministic heuristic above.
+
+    Issue #163: ``use_llm`` resolves through ``llm_agents.default_use_llm``
+    when left as ``None`` so the LLM path is the chosen-by-default
+    behaviour. The deterministic heuristic above stays as the
+    fallback-on-failure path.
     """
+    from .llm_agents import default_use_llm
+
+    if use_llm is None:
+        use_llm = default_use_llm()
     if not candidates:
         return []
     candidate_ids = [c["merchant_id"] for c in candidates]

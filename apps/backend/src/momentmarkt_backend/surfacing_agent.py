@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from .llm_agents import run_headline_rewrite_agent
+from .llm_agents import default_use_llm, run_headline_rewrite_agent
 from .semantic_novelty import NoveltyResult, semantic_novelty
 from .storage import DemoStore
 
@@ -20,8 +20,15 @@ async def evaluate_surface(
     wrapped_user_context: dict[str, Any],
     user_id: str = "mia",
     city_id: str | None = None,
-    use_llm: bool = False,
+    use_llm: bool | None = None,
 ) -> dict[str, Any]:
+    # Issue #163: LLM is the chosen-by-default behaviour for the surfacing
+    # headline rewriter. Pass `use_llm=False` explicitly for deterministic
+    # paths (tests, demo-safety smoke runs) or set `MOMENTMARKT_USE_LLM=false`
+    # to flip the process-wide default off. Fallback inside the if-branch
+    # below stays intact for provider/network failures.
+    if use_llm is None:
+        use_llm = default_use_llm()
     candidates, exclusions = _filter_candidates(
         store.approved_offers(city_id=city_id),
         wrapped_user_context,

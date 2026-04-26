@@ -7,6 +7,25 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+def default_use_llm() -> bool:
+    """Process-wide default for the ``use_llm`` flag (issue #163).
+
+    Per the "no fake mock data, use the LLM" directive, the LLM path is
+    the chosen-by-default behaviour for every demo surface — fixtures
+    stay around as fallback-on-failure only.
+
+    Teammates running deterministic locally (no Azure key, no network,
+    or just wanting reproducible output) can flip the default off with
+    ``MOMENTMARKT_USE_LLM=false`` in the environment. Accepted falsey
+    values (case-insensitive): ``"0"``, ``"false"``, ``"no"``, ``"off"``.
+    Anything else (including unset) keeps the default at True.
+    """
+    raw = os.environ.get("MOMENTMARKT_USE_LLM")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
 class ValidWindow(BaseModel):
     start: str
     end: str

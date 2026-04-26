@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .genui import coerce_widget_node
-from .llm_agents import run_opportunity_agent
+from .llm_agents import default_use_llm, run_opportunity_agent
 from .signals import SignalContext
 
 
@@ -38,8 +38,17 @@ def fallback_draft(context: SignalContext) -> dict[str, Any]:
 
 
 async def generate_offer(
-    context: SignalContext, high_intent: bool = False, use_llm: bool = False
+    context: SignalContext,
+    high_intent: bool = False,
+    use_llm: bool | None = None,
 ) -> dict[str, Any]:
+    # Issue #163: LLM is the chosen-by-default behaviour. Callers that
+    # need deterministic output (tests, demo-safety smoke runs) MUST pass
+    # `use_llm=False` explicitly. Pass-through `None` resolves via the
+    # process-wide `MOMENTMARKT_USE_LLM` env var (defaults to True).
+    if use_llm is None:
+        use_llm = default_use_llm()
+
     generation_log: list[str] = []
     fallback = fallback_draft(context)
 

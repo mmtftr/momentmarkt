@@ -20,6 +20,7 @@ from .alternatives import (
     _lookup_merchant,
 )
 from .fixtures import available_cities, load_city_config, load_density
+from .llm_agents import default_use_llm
 from .merchants import emoji_for, search_merchants
 from .onboarding import router as onboarding_router
 from .opportunity_agent import generate_offer
@@ -74,14 +75,18 @@ class OpportunityRequest(BaseModel):
     city: str = Field(default="berlin", examples=["berlin"])
     merchant_id: str | None = Field(default=None, examples=["berlin-mitte-cafe-bondi"])
     high_intent: bool = False
-    use_llm: bool = False
+    # Issue #163: LLM is the chosen-by-default behaviour. Fixture stays
+    # as fallback-on-failure inside `generate_offer`. Override per-process
+    # with `MOMENTMARKT_USE_LLM=false` for deterministic local runs.
+    use_llm: bool = Field(default_factory=default_use_llm)
     require_trigger: bool = False
     suppress_rejected: bool = True
 
 
 class OpportunityBatchRequest(BaseModel):
     city: str = Field(default="berlin", examples=["berlin"])
-    use_llm: bool = False
+    # Issue #163: LLM-default for the batched seed pass too.
+    use_llm: bool = Field(default_factory=default_use_llm)
     suppress_rejected: bool = True
 
 
@@ -90,7 +95,10 @@ class SurfacingRequest(BaseModel):
     user_id: str = "mia"
     merchant_id: str | None = Field(default=None, examples=["berlin-mitte-cafe-bondi"])
     seed_offer: bool = True
-    use_llm: bool = False
+    # Issue #163: LLM-default. Surfacing rewrites the headline through
+    # Pydantic AI by default; falls back to the deterministic rewriter on
+    # any failure inside `evaluate_surface`.
+    use_llm: bool = Field(default_factory=default_use_llm)
     high_intent: dict[str, Any] | None = None
 
 
@@ -560,7 +568,11 @@ class AlternativesRequest(BaseModel):
     base_discount_pct: float = 5.0
     max_discount_pct: float = 25.0
     n: int = 3
-    use_llm: bool = False
+    # Issue #163: LLM-default for the swipe stack too — drives the
+    # per-card subhead generator + headline rewriter + preference re-rank.
+    # Each downstream agent keeps its own deterministic fallback for
+    # provider failure; override globally with `MOMENTMARKT_USE_LLM=false`.
+    use_llm: bool = Field(default_factory=default_use_llm)
     preference_context: list[PriorSwipe] | None = None
     # Issue #151: session-scoped seen-set so tapping the same lens
     # repeatedly rotates through the city's offers instead of looping
