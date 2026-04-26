@@ -128,7 +128,7 @@ export const fallbackWidgetSpec = {
 };
 
 export function useMerchantStats(merchantId: string, intervalMs = 2000) {
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  const baseUrl = import.meta.env.VITE_API_URL || "https://peaktwilight-momentmarkt-api.hf.space";
   const [state, setState] = useState<MerchantPollState>({
     baseUrl,
     error: null,

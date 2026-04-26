@@ -3,7 +3,7 @@
  * Mirrors the FastAPI router in apps/backend/src/momentmarkt_backend/onboarding.py.
  */
 
-const BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+const BASE = (import.meta.env.VITE_API_URL || "https://peaktwilight-momentmarkt-api.hf.space").replace(/\/$/, "");
 
 export type StageId =
   | "reading_menu"
@@ -56,7 +56,8 @@ export type HoursResponse = {
   blackouts: Record<string, { start: string; end: string }[]> | null;
   demand_curve: {
     day_of_week: string;
-    baseline: { time: string; density: number }[];
+    anchor_day: string;
+    per_day: Record<string, { time: string; density: number }[]>;
     live: { time: string; density: number }[];
     merchant_goal?: string | null;
   } | null;
