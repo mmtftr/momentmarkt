@@ -94,15 +94,13 @@ const FALLBACK_CASHBACK_EUR = 1.85;
 // offer step now relies on BottomSheetScrollView (issue #88) inside
 // WalletSheetContent for any minor overflow on small phones.
 const SHEET_SNAP_POINTS = ["25%", "55%", "80%"] as const;
-// Visible content height of the iOS UITabBarController bar (≈49pt above the
-// home-indicator inset on iPhone). Used as bottomInset on the BottomSheet
-// inside the Home scene so the lowest sheet snap (25%) lands flush against
-// the tab bar's top edge — the lib's TabView is translucent by default and
-// scenes extend behind the bar, so without this inset the sheet content
-// would slide under the tab labels. The home-indicator inset is added
-// separately via `insets.bottom`. Issue #103 swapped the inline JS
-// <BottomMenu /> for a real UITabBarController via react-native-bottom-tabs.
-const TAB_BAR_HEIGHT = 49;
+// react-native-bottom-tabs renders a real UITabBarController. iOS
+// propagates the tab bar's height into each child scene's
+// `additionalSafeAreaInsets`, so `useSafeAreaInsets().bottom` *inside* the
+// Home scene already accounts for both the home-indicator inset and the
+// visible tab bar height. We use that value directly as the BottomSheet's
+// bottomInset — adding a separate TAB_BAR_HEIGHT constant on top
+// double-counts and lifts the sheet above the tab bar with a visible gap.
 
 export default function App() {
   const [step, setStep] = useState<DemoStep>("silent");
@@ -370,18 +368,18 @@ export default function App() {
           section (#80). The MapTopChip above is still a contextual quick
           path into the DevPanelOverlay during the silent Home beat. */}
 
-      {/* Bottom sheet wallet drawer. bottomInset clears the visible
-          UITabBarController bar (intrinsic ≈49pt + home-indicator inset)
-          so the lowest snap (25%) sits flush against the tab bar top
-          edge — the lib's TabView is translucent, so without this inset
-          the sheet content would slide under the tab labels (issue #103). */}
+      {/* Bottom sheet wallet drawer. iOS pushes the UITabBarController's
+          height into the scene's safe-area `bottom` inset, so passing
+          `insets.bottom` as bottomInset already clears both the tab bar
+          and the home indicator — the lowest snap (25%) lands flush
+          against the tab bar's top edge without double-counting. */}
       <BottomSheet
         ref={sheetRef}
         index={0}
         snapPoints={SHEET_SNAP_POINTS as unknown as string[]}
         animatedIndex={animatedIndex}
         onChange={handleSheetChange}
-        bottomInset={TAB_BAR_HEIGHT + Math.max(insets.bottom, 8)}
+        bottomInset={Math.max(insets.bottom, 8)}
         // Issue #100: respect the safe-area top so the 80% snap doesn't
         // collide with the iOS status bar / Dynamic Island. gorhom's
         // `topInset` is the floor distance the sheet keeps from the top
