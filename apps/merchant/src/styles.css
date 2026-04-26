@@ -115,11 +115,8 @@ code {
 .rail-mark {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
   display: block;
   object-fit: contain;
-  box-shadow: 0 4px 12px rgba(23, 18, 15, 0.12);
-  background: var(--cream);
 }
 
 .rail-brand-text {
@@ -1962,11 +1959,8 @@ code {
 .ob-mark-glyph {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
   display: block;
   object-fit: contain;
-  background: var(--cream);
-  box-shadow: 0 4px 12px rgba(23, 18, 15, 0.15);
 }
 
 .ob-frame {
