@@ -36,6 +36,7 @@ from .menu_ocr import (
     extract_menu_from_text,
     load_fixture_menu,
 )
+from .blackout_detection import detect_for_density_fixture
 from .menu_edit_agent import apply_diffs, run_menu_edit_agent
 from .paths import DATA_DIR
 
@@ -219,7 +220,7 @@ async def _run_pipeline(session: OnboardingSession) -> None:
         session.current_stage = "analyzing_demand"
         session.stages["analyzing_demand"] = "active"
         await _gate(STAGE_GATE_SECONDS)
-        session.blackouts = _detect_blackouts_stub(session.density)
+        session.blackouts = _detect_blackouts(session.density)
         session.demand_curve = _shape_demand_curve(session.density)
         session.stages["analyzing_demand"] = "done"
         session.current_stage = None
@@ -229,9 +230,8 @@ async def _run_pipeline(session: OnboardingSession) -> None:
             session.stages[session.current_stage] = "error"
 
 
-def _detect_blackouts_stub(density: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
-    """Placeholder for issue #168 — returns empty windows per day."""
-    return {d: [] for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+def _detect_blackouts(density: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
+    return detect_for_density_fixture(density)
 
 
 def _shape_demand_curve(density: dict[str, Any]) -> dict[str, Any]:

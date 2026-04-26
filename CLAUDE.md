@@ -14,6 +14,31 @@
 - Merchant inbox can be the fastest credible web surface.
 - The old untracked Next.js scaffold under `src/` is obsolete according to `spec-v04`.
 
+## Merchant-Facing UI Copy (CRITICAL)
+
+The merchant inbox (`apps/merchant/`) is a real product surface seen by shop owners during the demo. Copy must read like a polished SaaS, not a project hand-off.
+
+**Never put these in user-facing strings (UI labels, helper text, error messages, button copy, agent replies, captions, footers, headers, tooltips):**
+
+- Issue numbers (`#166`, `#167`, `Issue #168`, `phase-3`, etc.)
+- Spec or doc references (`SPEC.md`, `spec-v04`, `END_GOAL_ARCHITECTURE`, `AGENT_IO`)
+- Implementation details (`Pydantic AI`, `OCR`, `LLM`, `FastAPI`, `fixture`, `endpoint`, `polling`, `JSON schema`, `Pydantic`)
+- Provider/credential names (`AZURE_OPENAI_*`, `MOMENTMARKT_LLM_PROVIDER`, environment variable names, `.env`)
+- Phase or roadmap labels (`v2`, `coming in #...`, `phase 3`, `placeholder for...`)
+- Demo-truth-boundary explanations (`Real OCR runs on the menu`, `Google Maps + transaction data come from the demo fixtures`, `synthetic`, `simulated`)
+- Internal session/state vocabulary (`onboarding session`, `merchant_id`, `session id`)
+
+**Do this instead:**
+
+- Speak in merchant outcomes ("We pulled your hours," "We'll show you when you're full," "Approve in one tap").
+- Errors: tell the merchant what they can do, not what failed internally. Bad: "Couldn't reach the menu agent — check that AZURE_OPENAI_* env vars are set." Good: "Couldn't reach the menu assistant just now. Keep editing items directly — we'll save your changes either way."
+- Loading states: short and human ("Reading your menu," "Saving…"), never narrating the pipeline architecture.
+- If a feature is genuinely unimplemented and the user reaches it, write neutral forward copy ("Coming up next") rather than naming the issue or phase.
+
+These rules apply to **every string in `apps/merchant/src/`** — TSX/JSX text, `aria-label`, `alt`, `placeholder`, `title`, toast messages, server-side strings rendered to the merchant. They also apply to backend strings that round-trip into merchant-visible UI (e.g., agent reply text, HTTP error `detail` fields shown in toasts).
+
+If you're tempted to write internals into a label "for clarity," you don't have the right label yet — keep iterating until the label says what it does in merchant terms.
+
 ## Coordination Rules
 
 - Before editing implementation files, claim or create a GitHub issue in `mmtftr/momentmarkt` and comment that you are taking it.

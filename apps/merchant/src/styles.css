@@ -2640,3 +2640,407 @@ code {
 .ob-agent-input .primary-button {
   flex: 0 0 auto;
 }
+
+/* === Hours step + demand chart === */
+
+.ob-card {
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: var(--cream);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob-card h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+}
+
+.ob-card-foot {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.ob-step-subhead h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.ob-step-subhead p {
+  margin: 0;
+}
+
+.ob-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ob-hours-row {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px;
+  border-radius: 10px;
+}
+
+.ob-hours-row:nth-child(odd) {
+  background: var(--cream-soft);
+}
+
+.ob-hours-row.is-closed {
+  color: var(--ink-mute);
+}
+
+.ob-hours-day {
+  font-weight: 600;
+}
+
+.ob-hours-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ob-hours-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ob-hours-range input {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--ink);
+}
+
+.ob-hours-range input:focus {
+  outline: 2px solid var(--cocoa);
+  outline-offset: 1px;
+}
+
+.ob-hours-closed {
+  font-style: italic;
+  color: var(--ink-mute);
+}
+
+/* Chart */
+
+.ob-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-chart-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ob-chart-tab {
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ob-chart-tab.is-active {
+  background: var(--cocoa);
+  color: var(--cream);
+  border-color: var(--cocoa);
+}
+
+.ob-chart-tab.has-data:not(.is-active) {
+  color: var(--ink);
+}
+
+.ob-chart-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--spark);
+}
+
+.ob-chart-svg {
+  width: 100%;
+  height: auto;
+  background: var(--cream-soft);
+  border-radius: 12px;
+}
+
+.ob-chart-grid {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.ob-chart-axis-label {
+  font-size: 10px;
+  fill: var(--ink-mute);
+  font-family: inherit;
+}
+
+.ob-chart-blackout {
+  fill: rgba(242, 84, 45, 0.18);
+  stroke: rgba(242, 84, 45, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.ob-chart-baseline-area {
+  fill: rgba(111, 63, 44, 0.1);
+  stroke: none;
+}
+
+.ob-chart-baseline-line {
+  fill: none;
+  stroke: var(--cocoa);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+
+.ob-chart-live-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ob-chart-empty {
+  font-size: 13px;
+  fill: var(--ink-mute);
+  font-family: inherit;
+}
+
+.ob-chart-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.ob-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ob-chart-legend-dot {
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+
+.ob-chart-legend-dot.is-baseline {
+  background: var(--cocoa);
+  opacity: 0.6;
+}
+
+.ob-chart-legend-dot.is-blackout {
+  background: rgba(242, 84, 45, 0.55);
+}
+
+.ob-chart-caption {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* === Flow diagram === */
+
+.ob-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--cream);
+  padding: 20px;
+}
+
+.ob-flow-track {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  align-items: stretch;
+}
+
+@media (max-width: 880px) {
+  .ob-flow-track {
+    grid-template-columns: 1fr;
+  }
+  .ob-flow-arrow {
+    display: none;
+  }
+}
+
+.ob-flow-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.ob-flow-node > button {
+  font: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 14px 14px 14px;
+  background: var(--cream-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  cursor: pointer;
+  height: 100%;
+  transition: transform 120ms, background 120ms, border-color 120ms;
+}
+
+.ob-flow-node > button:hover {
+  background: var(--cream-deeper);
+}
+
+.ob-flow-node.is-active > button {
+  background: var(--cocoa);
+  color: var(--cream);
+  border-color: var(--cocoa);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(23, 18, 15, 0.15);
+}
+
+.ob-flow-num {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.ob-flow-node.is-active .ob-flow-num {
+  color: rgba(255, 248, 238, 0.7);
+}
+
+.ob-flow-title {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.ob-flow-sub {
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.3;
+}
+
+.ob-flow-node.is-active .ob-flow-sub {
+  color: rgba(255, 248, 238, 0.85);
+}
+
+.ob-flow-arrow {
+  position: absolute;
+  top: 50%;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%) rotate(45deg);
+  border-top: 1.5px solid var(--ink-mute);
+  border-right: 1.5px solid var(--ink-mute);
+}
+
+.ob-flow-explainer {
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--cream-soft);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  min-height: 64px;
+}
+
+/* === Limits panel === */
+
+.ob-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.ob-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ob-slider-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.ob-slider-value {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ob-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ob-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cocoa);
+}
+
+.ob-rule-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ob-rule-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.ob-rule-list input[type="checkbox"] {
+  accent-color: var(--cocoa);
+}
+
+.ob-hours-step,
+.ob-flow-step {
+  max-width: none;
+}

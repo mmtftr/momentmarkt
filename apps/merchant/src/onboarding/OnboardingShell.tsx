@@ -8,6 +8,8 @@ import { useCallback, useReducer } from "react";
 import { ProgressStepper } from "./components/ProgressStepper";
 import { initialState, reduce, setOnboarded } from "./state/onboardingMachine";
 import { DropStep } from "./steps/DropStep";
+import { FlowIntroStep } from "./steps/FlowIntroStep";
+import { HoursStep } from "./steps/HoursStep";
 import { MenuConfirmStep } from "./steps/MenuConfirmStep";
 import { ProcessingStep } from "./steps/ProcessingStep";
 import { postComplete } from "./api/onboardingApi";
@@ -83,20 +85,21 @@ export function OnboardingShell({ onComplete }: Props) {
           />
         ) : null}
 
-        {state.step === "hours" ? (
-          <PlaceholderStep
-            title="Hours and blackouts"
-            details="We'll show your opening hours and the times you're already at capacity. Coming up next."
-            onAdvance={() => dispatch({ type: "advance", to: "flow" })}
+        {state.step === "hours" && state.onboardingId ? (
+          <HoursStep
+            onboardingId={state.onboardingId}
+            onConfirm={(h) => {
+              dispatch({ type: "hours_loaded", hours: h });
+              dispatch({ type: "advance", to: "flow" });
+            }}
           />
         ) : null}
 
-        {state.step === "flow" ? (
-          <PlaceholderStep
-            title="How MomentMarkt works for your shop"
-            details="A short tour of how offers get drafted, approved, and surfaced to nearby customers."
-            onAdvance={completeNow}
-            advanceLabel="Start receiving opportunities"
+        {state.step === "flow" && state.onboardingId && state.menu ? (
+          <FlowIntroStep
+            onboardingId={state.onboardingId}
+            menu={state.menu}
+            onComplete={completeNow}
           />
         ) : null}
 
@@ -110,51 +113,3 @@ export function OnboardingShell({ onComplete }: Props) {
   );
 }
 
-function PlaceholderStep({
-  title,
-  details,
-  onAdvance,
-  advanceLabel = "Continue",
-  menu,
-}: {
-  title: string;
-  details: string;
-  onAdvance: () => void;
-  advanceLabel?: string;
-  menu?: import("./api/onboardingApi").ExtractedMenu | null;
-}) {
-  return (
-    <section className="ob-step ob-placeholder">
-      <header className="ob-step-head">
-        <h1>{title}</h1>
-        <p className="lead">{details}</p>
-      </header>
-
-      {menu ? (
-        <ul className="ob-menu-preview">
-          {menu.categories.map((c) => (
-            <li key={c.id}>
-              <strong>{c.label}</strong>
-              <small>{c.items.length} items</small>
-              <ul>
-                {c.items.slice(0, 4).map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <span>€{item.price_eur.toFixed(2)}</span>
-                  </li>
-                ))}
-                {c.items.length > 4 ? <li className="ob-muted">+{c.items.length - 4} more…</li> : null}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <footer className="ob-step-foot">
-        <button type="button" className="primary-button" onClick={onAdvance}>
-          {advanceLabel}
-        </button>
-      </footer>
-    </section>
-  );
-}
