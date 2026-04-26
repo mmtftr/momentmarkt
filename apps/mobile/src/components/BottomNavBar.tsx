@@ -72,8 +72,17 @@
  */
 
 import { SymbolView } from "expo-symbols";
+import { useEffect, useRef } from "react";
 import type { ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SFSymbol } from "sf-symbols-typescript";
 
@@ -144,6 +153,21 @@ export function BottomNavBar({
   walletBadgeCount = 0,
 }: Props): ReactElement {
   const insets = useSafeAreaInsets();
+  const previousWalletBadgeCount = useRef(walletBadgeCount);
+  const walletAddedPulse = useSharedValue(0);
+
+  useEffect(() => {
+    if (walletBadgeCount > previousWalletBadgeCount.current) {
+      walletAddedPulse.value = 0;
+      walletAddedPulse.value = withSequence(
+        withTiming(1, { duration: 170, easing: Easing.out(Easing.cubic) }),
+        withTiming(1, { duration: 620 }),
+        withTiming(0, { duration: 220, easing: Easing.in(Easing.cubic) }),
+      );
+    }
+    previousWalletBadgeCount.current = walletBadgeCount;
+  }, [walletAddedPulse, walletBadgeCount]);
+
   const handleSelect = (key: ViewMode) => {
     if (key !== activeView) {
       lightTap();
@@ -177,6 +201,7 @@ export function BottomNavBar({
           spec={OUTER_TABS[0]}
           active={activeView === OUTER_TABS[0].key}
           badgeCount={walletBadgeCount}
+          addedPulse={walletAddedPulse}
           onPress={() => handleSelect(OUTER_TABS[0].key)}
         />
         <OuterNavTab
@@ -231,15 +256,34 @@ function OuterNavTab({
   spec,
   active,
   badgeCount,
+  addedPulse,
   onPress,
 }: {
   spec: TabSpec;
   active: boolean;
   badgeCount: number;
+  addedPulse?: SharedValue<number>;
   onPress: () => void;
 }): ReactElement {
   const tintColor = active ? "#f2542d" : "#6f3f2c";
   const showBadge = badgeCount > 0;
+  const addedPillStyle = useAnimatedStyle(() => {
+    const value = addedPulse?.value ?? 0;
+    return {
+      opacity: value,
+      transform: [
+        { translateY: (1 - value) * 8 },
+        { scale: 0.94 + value * 0.06 },
+      ],
+    };
+  });
+  const addedRingStyle = useAnimatedStyle(() => {
+    const value = addedPulse?.value ?? 0;
+    return {
+      opacity: (1 - value) * 0.25,
+      transform: [{ scale: 1 + value * 1.8 }],
+    };
+  });
   return (
     <Pressable
       accessibilityRole="button"
@@ -261,6 +305,23 @@ function OuterNavTab({
           badge anchor stays stable across active/inactive weight
           changes. */}
       <View style={{ width: 22, height: 22 }}>
+        {addedPulse ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              {
+                position: "absolute",
+                left: -9,
+                top: -9,
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: "#f2542d",
+              },
+              addedRingStyle,
+            ]}
+          />
+        ) : null}
         <SymbolView
           name={spec.sfSymbol}
           tintColor={tintColor}
@@ -304,6 +365,43 @@ function OuterNavTab({
               {String(badgeCount)}
             </Text>
           </View>
+        ) : null}
+        {addedPulse ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              {
+                position: "absolute",
+                top: -34,
+                left: -28,
+                height: 24,
+                borderRadius: 12,
+                paddingHorizontal: 9,
+                backgroundColor: "#17120f",
+                borderWidth: 1,
+                borderColor: "#fff8ee",
+                alignItems: "center",
+                justifyContent: "center",
+                shadowColor: "#17120f",
+                shadowOpacity: 0.12,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+              },
+              addedPillStyle,
+            ]}
+          >
+            <Text
+              style={{
+                color: "#fff8ee",
+                fontSize: 10,
+                fontWeight: "900",
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+              }}
+            >
+              Added
+            </Text>
+          </Animated.View>
         ) : null}
       </View>
       <Text
