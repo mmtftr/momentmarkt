@@ -296,3 +296,59 @@ class TestFixtureReuseAcrossCities:
         b = load_weather("berlin")
         z = load_weather("zurich")
         assert b["timezone"] != z["timezone"] or b["latitude"] != z["latitude"]
+
+    def test_weather_defaults_to_fixture_source(self) -> None:
+        weather = load_weather("berlin")
+
+        assert weather["momentmarkt_source"] == "open_meteo_fixture"
+
+    def test_live_weather_source_uses_open_meteo_with_fixture_coordinates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from momentmarkt_backend import fixtures as fixtures_mod
+
+        calls: list[dict] = []
+
+        class Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {
+                    "latitude": 52.52,
+                    "longitude": 13.42,
+                    "timezone": "Europe/Berlin",
+                    "current": {"temperature_2m": 12.3},
+                    "hourly": {"precipitation_probability": [0] * 8},
+                }
+
+        def fake_get(url: str, **kwargs: dict) -> Response:
+            calls.append({"url": url, **kwargs})
+            return Response()
+
+        monkeypatch.setenv("MOMENTMARKT_WEATHER_SOURCE", "live")
+        monkeypatch.setattr(fixtures_mod.httpx, "get", fake_get)
+
+        weather = load_weather("berlin")
+
+        assert weather["momentmarkt_source"] == "open_meteo_live"
+        assert calls[0]["url"] == fixtures_mod.OPEN_METEO_FORECAST_URL
+        assert calls[0]["params"]["latitude"] == 52.52
+        assert calls[0]["params"]["longitude"] == 13.419998
+
+    def test_live_weather_falls_back_to_fixture_on_open_meteo_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from momentmarkt_backend import fixtures as fixtures_mod
+
+        def failing_get(*_args: object, **_kwargs: object) -> None:
+            raise TimeoutError("offline")
+
+        monkeypatch.setenv("MOMENTMARKT_WEATHER_SOURCE", "live")
+        monkeypatch.setattr(fixtures_mod.httpx, "get", failing_get)
+
+        weather = load_weather("berlin")
+
+        assert weather["momentmarkt_source"] == "open_meteo_fixture_fallback"
+        assert weather["momentmarkt_source_error"] == "TimeoutError"
+        assert weather["current"]["temperature_2m"] == 16.4

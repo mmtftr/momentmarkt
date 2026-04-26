@@ -30,7 +30,7 @@ INTENT_TOKENS = {
 
 def build_signal_context(city: str, merchant_id: str | None = None) -> SignalContext:
     config = load_city_config(city)
-    weather = load_weather(city)
+    weather = load_weather(city, config.get("weather_fixture"))
     events = load_events(city)
     density = load_density_merged(city, config["density_fixture"])
     merchant = _select_merchant(density["merchants"], merchant_id)
@@ -59,7 +59,7 @@ def build_signal_context(city: str, merchant_id: str | None = None) -> SignalCon
         "timezone": config["timezone"],
         "demo_time_local": config["demo"]["time_local"],
         "weather": {
-            "source": "Open-Meteo fixture",
+            "source": _weather_source_label(weather),
             "trigger": weather_trigger,
             "summary": _weather_summary(config, weather_trigger),
             "current": weather.get("current", {}),
@@ -161,6 +161,15 @@ def _weather_summary(config: dict[str, Any], trigger: str) -> str:
     if trigger == "rain_incoming":
         return f"Rain incoming in {config['display_area']}"
     return f"Clear weather in {config['display_area']}"
+
+
+def _weather_source_label(weather: dict[str, Any]) -> str:
+    source = weather.get("momentmarkt_source")
+    if source == "open_meteo_live":
+        return "Open-Meteo live"
+    if source == "open_meteo_fixture_fallback":
+        return "Open-Meteo fixture fallback"
+    return "Open-Meteo fixture"
 
 
 def _event_summary(event: dict[str, Any] | None) -> str:

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from .paths import CITY_CONFIG_DIR, DATA_DIR
 
@@ -18,8 +21,71 @@ def load_json(path: str) -> Fixture:
         return json.load(file)
 
 
-def load_weather(city: str) -> Fixture:
-    return load_json(str(DATA_DIR / "weather" / f"{city}.json"))
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+WEATHER_SOURCE_ENV = "MOMENTMARKT_WEATHER_SOURCE"
+
+
+def load_weather(city: str, fixture: str | None = None) -> Fixture:
+    """Load weather for a city.
+
+    Local tests and development use committed Open-Meteo snapshots for
+    deterministic demo behaviour. The deployed Space can opt into live
+    Open-Meteo with ``MOMENTMARKT_WEATHER_SOURCE=live``; failures fall back
+    to the same fixture shape so the demo never loses its weather payload.
+    """
+
+    fixture_name = fixture or city
+    fallback = copy.deepcopy(load_json(str(DATA_DIR / "weather" / f"{fixture_name}.json")))
+    if os.environ.get(WEATHER_SOURCE_ENV, "fixture").lower() != "live":
+        fallback["momentmarkt_source"] = "open_meteo_fixture"
+        return fallback
+
+    try:
+        live = _fetch_open_meteo_weather(fallback)
+    except Exception as exc:  # pragma: no cover - exercised through tests via monkeypatch
+        fallback["momentmarkt_source"] = "open_meteo_fixture_fallback"
+        fallback["momentmarkt_source_error"] = exc.__class__.__name__
+        return fallback
+
+    live["momentmarkt_source"] = "open_meteo_live"
+    return live
+
+
+def _fetch_open_meteo_weather(fallback: Fixture) -> Fixture:
+    latitude = fallback.get("latitude")
+    longitude = fallback.get("longitude")
+    if latitude is None or longitude is None:
+        raise ValueError("weather fixture is missing latitude/longitude")
+
+    response = httpx.get(
+        OPEN_METEO_FORECAST_URL,
+        params={
+            "latitude": latitude,
+            "longitude": longitude,
+            "current": ",".join(
+                [
+                    "temperature_2m",
+                    "precipitation",
+                    "weather_code",
+                    "wind_speed_10m",
+                    "relative_humidity_2m",
+                ]
+            ),
+            "hourly": ",".join(
+                [
+                    "temperature_2m",
+                    "precipitation_probability",
+                    "precipitation",
+                    "weather_code",
+                ]
+            ),
+            "timezone": fallback.get("timezone", "auto"),
+            "forecast_days": 2,
+        },
+        timeout=2.0,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def load_events(city: str) -> Fixture:

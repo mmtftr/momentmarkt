@@ -5,6 +5,8 @@
 
 FROM python:3.11-slim
 
+ENV MOMENTMARKT_WEATHER_SOURCE=live
+
 RUN pip install --no-cache-dir uv==0.4.30
 
 COPY apps/backend/pyproject.toml apps/backend/uv.lock /app/apps/backend/
