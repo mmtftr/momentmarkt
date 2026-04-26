@@ -18,11 +18,11 @@
 <tr>
 <td width="50%" align="center">
 <strong>Demo · product walkthrough</strong><br/>
-<video src="https://github.com/momentmarkt/momentmarkt/raw/main/assets/momentmarkt-demo.mp4" controls width="100%"></video>
+<video src="https://github.com/momentmarkt/momentmarkt/releases/download/demo-videos/momentmarkt-demo.mp4" controls width="100%"></video>
 </td>
 <td width="50%" align="center">
 <strong>Tech · architecture walkthrough</strong><br/>
-<video src="https://github.com/momentmarkt/momentmarkt/raw/main/assets/momentmarkt-tech.mp4" controls width="100%"></video>
+<video src="https://github.com/momentmarkt/momentmarkt/releases/download/demo-videos/momentmarkt-tech.mp4" controls width="100%"></video>
 </td>
 </tr>
 </table>
