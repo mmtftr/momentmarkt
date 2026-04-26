@@ -48,7 +48,7 @@ pnpm mobile:typecheck
 ```
 
 The Expo app lives in `apps/mobile`. It is the canonical consumer demo surface;
-the older untracked Next.js scaffold under `src/` is obsolete per `spec-v03`.
+the older untracked Next.js scaffold under `src/` is obsolete per `spec-v04`.
 
 ## Run The Merchant Inbox
 
@@ -176,30 +176,19 @@ coordinator Claude Code instance as the dispatcher.
 
 ## Shape
 
-```
-    stage 00: EXPLORE                      stage 01: PLAN
-┌──────────────────────────┐           ┌──────────────────┐
-│ ideator → explorer*      │ ────▶     │ planner          │
-│ (loop until budget or    │           │ writes SPEC.md   │
-│  empty queue)            │           └────────┬─────────┘
-└──────────────────────────┘                    │
-         ▲                                      ▼
-         │                             stage 02: CRITIQUE + REFINE
-         │                             ┌──────────────────────────┐
-         │ EXPLORATION_REQUEST.md ◀────│ critic                   │
-         │                             │ writes CRITIQUE.md       │
-         │                             │ optional: request more   │
-         │                             │ exploration              │
-         │                             └────────┬─────────────────┘
-         │                                      │
-         │                                      ▼
-         │                             planner refines SPEC.md
-         │                                      │
-         │                                      ▼
-         │                             stage 03: JUDGE
-         │                             ┌──────────────────┐
-         └─ or loop again              │ judge → YES/NO   │
-                                       └──────────────────┘
+```mermaid
+flowchart LR
+  EXPLORE["stage 00: EXPLORE<br/>ideator -> explorer*<br/>(loop until budget or empty queue)"]
+  PLAN["stage 01: PLAN<br/>planner<br/>writes SPEC.md"]
+  CRIT["stage 02: CRITIQUE + REFINE<br/>critic writes CRITIQUE.md<br/>(optional: request more exploration)"]
+  REFINE["planner refines SPEC.md"]
+  JUDGE["stage 03: JUDGE<br/>judge -> YES/NO"]
+
+  EXPLORE --> PLAN
+  PLAN --> CRIT
+  CRIT -. "EXPLORATION_REQUEST.md (or loop again)" .-> EXPLORE
+  CRIT --> REFINE
+  REFINE --> JUDGE
 ```
 
 ## Files you fill in before first run

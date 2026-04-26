@@ -92,7 +92,7 @@ sequenceDiagram
   RN->>SUR: weather flips: rain_incoming<br/>density curve dips
   SUR->>SUR: re-score eligible offers<br/>walk-ring = h3 + 1
   SUR->>OPP: cache lookup (offer_id, weather, intent)
-  OPP-->>SUR: rewritten headline<br/>"Es regnet bald. 80 m..."
+  OPP-->>SUR: rewritten headline<br/>"Rain in 12 min. 80 m to hot cocoa."
   SUR-->>RN: fire in-app card
 
   Mia->>RN: tap card

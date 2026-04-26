@@ -38,7 +38,7 @@ Open the installed MomentMarkt dev client in the iOS Simulator, then walk:
 3. Surface/offer path expands the sheet and shows the generated widget.
 4. Redeem CTA opens QR/token flow.
 5. Simulated girocard tap shows cashback success.
-6. History/Verlauf shows the receipt-style list.
+6. History tab shows the receipt-style list.
 
 ## Optional Maestro Smoke
 
