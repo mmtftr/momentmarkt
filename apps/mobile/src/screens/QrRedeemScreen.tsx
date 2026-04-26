@@ -110,16 +110,20 @@ export function QrRedeemScreen({
 
   const expired = secondsLeft === 0;
 
-  // iOS-style swipe-back gesture (active only when an `onCancel` is
-  // wired). Translates the QR view rightward as the user pans; past
-  // 35% of width or a fast right-flick, fires onCancel to dismiss the
-  // redeem flow. Mirrors the SettingsScreen + HistoryScreen pattern.
-  const { width } = useWindowDimensions();
+  // iOS-style dismiss gestures (active only when `onCancel` is wired).
+  // Right swipe = back-pop pattern; down swipe = modal-sheet dismiss.
+  // Both call onCancel on commit. Composed via Gesture.Race so whichever
+  // direction the user commits to wins.
+  const { width, height } = useWindowDimensions();
   const swipeX = useSharedValue(0);
+  const swipeY = useSharedValue(0);
   const swipeStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: swipeX.value }],
+    transform: [
+      { translateX: swipeX.value },
+      { translateY: swipeY.value },
+    ],
   }));
-  const swipeBack = useMemo(
+  const swipeRight = useMemo(
     () =>
       Gesture.Pan()
         .enabled(!!onCancel)
@@ -146,9 +150,40 @@ export function QrRedeemScreen({
         }),
     [width, swipeX, onCancel],
   );
+  const swipeDown = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!!onCancel)
+        .activeOffsetY([12, 9999])
+        .failOffsetX([-15, 15])
+        .onChange((e) => {
+          swipeY.value = Math.max(0, e.translationY);
+        })
+        .onEnd((e) => {
+          const shouldClose =
+            e.translationY > height * 0.25 || e.velocityY > 700;
+          if (shouldClose && onCancel) {
+            swipeY.value = withTiming(height, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+            runOnJS(onCancel)();
+          } else {
+            swipeY.value = withTiming(0, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+          }
+        }),
+    [height, swipeY, onCancel],
+  );
+  const dismissGesture = useMemo(
+    () => Gesture.Race(swipeRight, swipeDown),
+    [swipeRight, swipeDown],
+  );
 
   return (
-    <GestureDetector gesture={swipeBack}>
+    <GestureDetector gesture={dismissGesture}>
     <Animated.View style={[...s("flex-1 bg-cream px-5 py-6"), swipeStyle]}>
       {/* Header: top-left chevron back (when wired) above the merchant
           name. Matches the Settings + History overlay header pattern so

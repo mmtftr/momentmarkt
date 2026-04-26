@@ -195,9 +195,10 @@ export function HistoryScreen({
   // animation still runs harmlessly (translateX stays at 0) so callers
   // embedding History inline get a static layout.
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isOverlay = !!onClose;
   const translateX = useSharedValue(isOverlay ? width : 0);
+  const translateY = useSharedValue(0);
 
   useEffect(() => {
     if (!isOverlay) return;
@@ -205,16 +206,18 @@ export function HistoryScreen({
       duration: 300,
       easing: Easing.out(Easing.exp),
     });
-  }, [isOverlay, visible, width, translateX]);
+    if (visible) translateY.value = 0;
+  }, [isOverlay, visible, width, translateX, translateY]);
 
   const overlayStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
   }));
 
-  // iOS-style swipe-back gesture (overlay mode only). Identical to
-  // SettingsScreen — rightward pan ≥12pt activates, ≥35% width or fast
-  // right-flick commits to close.
-  const swipeBack = useMemo(
+  // iOS-style swipe-back gesture (rightward) — overlay mode only.
+  const swipeRight = useMemo(
     () =>
       Gesture.Pan()
         .enabled(isOverlay && !!onClose)
@@ -240,6 +243,41 @@ export function HistoryScreen({
           }
         }),
     [isOverlay, width, translateX, onClose],
+  );
+
+  // Companion swipe-down dismissal (iOS modal-sheet pattern). Yields to
+  // horizontal swipe + vertical scroll containers via failOffsetX.
+  const swipeDown = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(isOverlay && !!onClose)
+        .activeOffsetY([12, 9999])
+        .failOffsetX([-15, 15])
+        .onChange((e) => {
+          translateY.value = Math.max(0, e.translationY);
+        })
+        .onEnd((e) => {
+          const shouldClose =
+            e.translationY > height * 0.25 || e.velocityY > 700;
+          if (shouldClose && onClose) {
+            translateY.value = withTiming(height, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+            runOnJS(onClose)();
+          } else {
+            translateY.value = withTiming(0, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+          }
+        }),
+    [isOverlay, height, translateY, onClose],
+  );
+
+  const dismissGesture = useMemo(
+    () => Gesture.Race(swipeRight, swipeDown),
+    [swipeRight, swipeDown],
   );
 
   if (!visible) return null;
@@ -281,7 +319,7 @@ export function HistoryScreen({
 
   if (redemptions.length === 0) {
     return (
-      <GestureDetector gesture={swipeBack}>
+      <GestureDetector gesture={dismissGesture}>
         <Animated.View style={overlayWrapperStyle} pointerEvents="auto">
           {isOverlay ? (
             <View
@@ -317,7 +355,7 @@ export function HistoryScreen({
   }
 
   return (
-    <GestureDetector gesture={swipeBack}>
+    <GestureDetector gesture={dismissGesture}>
     <Animated.View style={overlayWrapperStyle} pointerEvents="auto">
       <ScrollView
         style={s("flex-1")}

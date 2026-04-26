@@ -100,27 +100,33 @@ export function SettingsScreen(props: Props): ReactElement | null {
   } = props;
 
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   // translateX: width (offscreen right) → 0 (covering screen) over 300ms.
+  // translateY: stays 0 in the entry animation; only the downward swipe
+  // gesture moves it. Combined transform = [X, Y].
   const translateX = useSharedValue(width);
+  const translateY = useSharedValue(0);
 
   useEffect(() => {
     translateX.value = withTiming(visible ? 0 : width, {
       duration: 300,
       easing: Easing.out(Easing.exp),
     });
-  }, [visible, width, translateX]);
+    if (visible) translateY.value = 0;
+  }, [visible, width, translateX, translateY]);
 
   const overlayStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
   }));
 
-  // iOS-style interactive swipe-back. Activates only on rightward pans
-  // ≥12pt so vertical scrolls + Switch taps are unaffected. Past ~35% of
-  // screen width (or a hard right-flick velocity), commit to close;
-  // otherwise spring back to 0. Mirrors the standard UIKit pop gesture.
-  const swipeBack = useMemo(
+  // iOS-style interactive swipe-back (rightward). Activates only on
+  // horizontal pans ≥12pt; vertical motion ≥15pt cancels so it yields to
+  // the swipe-down gesture below + any scroll containers underneath.
+  const swipeRight = useMemo(
     () =>
       Gesture.Pan()
         .activeOffsetX([12, 9999])
@@ -147,10 +153,48 @@ export function SettingsScreen(props: Props): ReactElement | null {
     [width, translateX, onClose],
   );
 
+  // Companion swipe-down dismissal (iOS modal-sheet pattern). Activates
+  // only on downward pans ≥12pt; horizontal motion ≥15pt cancels so it
+  // yields to swipe-back + horizontal scrollers. Past 25% of the screen
+  // height (or a fast downward flick), commits to close.
+  const swipeDown = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY([12, 9999])
+        .failOffsetX([-15, 15])
+        .onChange((e) => {
+          translateY.value = Math.max(0, e.translationY);
+        })
+        .onEnd((e) => {
+          const shouldClose =
+            e.translationY > height * 0.25 || e.velocityY > 700;
+          if (shouldClose) {
+            translateY.value = withTiming(height, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+            runOnJS(onClose)();
+          } else {
+            translateY.value = withTiming(0, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+          }
+        }),
+    [height, translateY, onClose],
+  );
+
+  // Race the two gestures so whichever direction the user commits to
+  // wins — neither blocks the other from being recognised.
+  const dismissGesture = useMemo(
+    () => Gesture.Race(swipeRight, swipeDown),
+    [swipeRight, swipeDown],
+  );
+
   if (!visible) return null;
 
   return (
-    <GestureDetector gesture={swipeBack}>
+    <GestureDetector gesture={dismissGesture}>
     <Animated.View
       style={[
         StyleSheet.absoluteFill,
