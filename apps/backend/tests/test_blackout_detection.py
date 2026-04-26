@@ -16,8 +16,9 @@ def test_saturday_baseline_yields_one_window():
     out = detect_for_density_fixture(bondi)
     sat = out["sat"]
     assert 1 <= len(sat) <= 3, f"expected 1-3 saturday windows, got {sat}"
-    # Bondi peak is 13:00–14:00 (densities 80, 82).
-    assert any(w["start"] == "13:00" and w["end"] == "14:00" for w in sat), sat
+    # Bondi's lunch blackout starts at 13:00. The fixture now keeps the full
+    # contiguous high-baseline run through 14:30 rather than clipping to one hour.
+    assert any(w["start"] == "13:00" and w["end"] == "14:30" for w in sat), sat
 
 
 def test_other_days_empty_when_no_data():
