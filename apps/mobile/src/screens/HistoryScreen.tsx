@@ -11,8 +11,10 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -209,6 +211,37 @@ export function HistoryScreen({
     transform: [{ translateX: translateX.value }],
   }));
 
+  // iOS-style swipe-back gesture (overlay mode only). Identical to
+  // SettingsScreen — rightward pan ≥12pt activates, ≥35% width or fast
+  // right-flick commits to close.
+  const swipeBack = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(isOverlay && !!onClose)
+        .activeOffsetX([12, 9999])
+        .failOffsetY([-15, 15])
+        .onChange((e) => {
+          translateX.value = Math.max(0, e.translationX);
+        })
+        .onEnd((e) => {
+          const shouldClose =
+            e.translationX > width * 0.35 || e.velocityX > 600;
+          if (shouldClose && onClose) {
+            translateX.value = withTiming(width, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+            runOnJS(onClose)();
+          } else {
+            translateX.value = withTiming(0, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+          }
+        }),
+    [isOverlay, width, translateX, onClose],
+  );
+
   if (!visible) return null;
 
   const overlayWrapperStyle = isOverlay
@@ -248,40 +281,43 @@ export function HistoryScreen({
 
   if (redemptions.length === 0) {
     return (
-      <Animated.View style={overlayWrapperStyle} pointerEvents="auto">
-        {isOverlay ? (
-          <View
-            style={[
-              ...s("flex-row items-center px-5"),
-              { paddingTop: 8, paddingBottom: 12, gap: 8 },
-            ]}
-          >
-            {backChevron}
-            <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
-              History
+      <GestureDetector gesture={swipeBack}>
+        <Animated.View style={overlayWrapperStyle} pointerEvents="auto">
+          {isOverlay ? (
+            <View
+              style={[
+                ...s("flex-row items-center px-5"),
+                { paddingTop: 8, paddingBottom: 12, gap: 8 },
+              ]}
+            >
+              {backChevron}
+              <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
+                History
+              </Text>
+            </View>
+          ) : null}
+          <View style={s("flex-1 items-center justify-center px-5")}>
+            <SymbolView
+              name="wallet.pass.fill"
+              tintColor="#6f3f2c"
+              size={60}
+              weight="medium"
+              style={{ width: 64, height: 64 }}
+            />
+            <Text style={[...s("mt-4 text-ink"), { fontSize: 18, fontWeight: "800" }]}>
+              No cashbacks yet. Get out there!
+            </Text>
+            <Text style={s("mt-2 text-center text-sm text-neutral-600")}>
+              Your history will show up after your first purchase.
             </Text>
           </View>
-        ) : null}
-        <View style={s("flex-1 items-center justify-center px-5")}>
-          <SymbolView
-            name="wallet.pass.fill"
-            tintColor="#6f3f2c"
-            size={60}
-            weight="medium"
-            style={{ width: 64, height: 64 }}
-          />
-          <Text style={[...s("mt-4 text-ink"), { fontSize: 18, fontWeight: "800" }]}>
-            No cashbacks yet. Get out there!
-          </Text>
-          <Text style={s("mt-2 text-center text-sm text-neutral-600")}>
-            Your history will show up after your first purchase.
-          </Text>
-        </View>
-      </Animated.View>
+        </Animated.View>
+      </GestureDetector>
     );
   }
 
   return (
+    <GestureDetector gesture={swipeBack}>
     <Animated.View style={overlayWrapperStyle} pointerEvents="auto">
       <ScrollView
         style={s("flex-1")}
@@ -437,6 +473,7 @@ export function HistoryScreen({
         </Text>
       </ScrollView>
     </Animated.View>
+    </GestureDetector>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   type ReactElement,
   type ReactNode,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import {
@@ -15,8 +16,10 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -113,9 +116,41 @@ export function SettingsScreen(props: Props): ReactElement | null {
     transform: [{ translateX: translateX.value }],
   }));
 
+  // iOS-style interactive swipe-back. Activates only on rightward pans
+  // ≥12pt so vertical scrolls + Switch taps are unaffected. Past ~35% of
+  // screen width (or a hard right-flick velocity), commit to close;
+  // otherwise spring back to 0. Mirrors the standard UIKit pop gesture.
+  const swipeBack = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([12, 9999])
+        .failOffsetY([-15, 15])
+        .onChange((e) => {
+          translateX.value = Math.max(0, e.translationX);
+        })
+        .onEnd((e) => {
+          const shouldClose =
+            e.translationX > width * 0.35 || e.velocityX > 600;
+          if (shouldClose) {
+            translateX.value = withTiming(width, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+            runOnJS(onClose)();
+          } else {
+            translateX.value = withTiming(0, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+          }
+        }),
+    [width, translateX, onClose],
+  );
+
   if (!visible) return null;
 
   return (
+    <GestureDetector gesture={swipeBack}>
     <Animated.View
       style={[
         StyleSheet.absoluteFill,
@@ -550,6 +585,7 @@ export function SettingsScreen(props: Props): ReactElement | null {
         </Text>
       </ScrollView>
     </Animated.View>
+    </GestureDetector>
   );
 }
 

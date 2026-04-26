@@ -1,9 +1,11 @@
 import { SymbolView } from "expo-symbols";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import QRCode from "react-native-qrcode-svg";
 import Animated, {
   Easing,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -108,8 +110,46 @@ export function QrRedeemScreen({
 
   const expired = secondsLeft === 0;
 
+  // iOS-style swipe-back gesture (active only when an `onCancel` is
+  // wired). Translates the QR view rightward as the user pans; past
+  // 35% of width or a fast right-flick, fires onCancel to dismiss the
+  // redeem flow. Mirrors the SettingsScreen + HistoryScreen pattern.
+  const { width } = useWindowDimensions();
+  const swipeX = useSharedValue(0);
+  const swipeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: swipeX.value }],
+  }));
+  const swipeBack = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!!onCancel)
+        .activeOffsetX([12, 9999])
+        .failOffsetY([-15, 15])
+        .onChange((e) => {
+          swipeX.value = Math.max(0, e.translationX);
+        })
+        .onEnd((e) => {
+          const shouldClose =
+            e.translationX > width * 0.35 || e.velocityX > 600;
+          if (shouldClose && onCancel) {
+            swipeX.value = withTiming(width, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+            runOnJS(onCancel)();
+          } else {
+            swipeX.value = withTiming(0, {
+              duration: 220,
+              easing: Easing.out(Easing.exp),
+            });
+          }
+        }),
+    [width, swipeX, onCancel],
+  );
+
   return (
-    <View style={s("flex-1 bg-cream px-5 py-6")}>
+    <GestureDetector gesture={swipeBack}>
+    <Animated.View style={[...s("flex-1 bg-cream px-5 py-6"), swipeStyle]}>
       {/* Header: top-left chevron back (when wired) above the merchant
           name. Matches the Settings + History overlay header pattern so
           all three "secondary surfaces" share one back-affordance. */}
@@ -242,7 +282,8 @@ export function QrRedeemScreen({
           </Text>
         </Pressable>
       </Animated.View>
-    </View>
+    </Animated.View>
+    </GestureDetector>
   );
 }
 
