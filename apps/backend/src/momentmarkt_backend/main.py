@@ -11,6 +11,11 @@ from .alternatives import build_alternatives, maybe_rewrite_with_llm, _lookup_me
 from .fixtures import available_cities, load_city_config, load_density
 from .merchants import emoji_for, search_merchants
 from .opportunity_agent import generate_offer
+from .preference_agent import (
+    PriorSwipe,
+    build_catalog_lookup,
+    rerank_candidates,
+)
 from .signals import build_all_signal_contexts, build_signal_context
 from .storage import DemoStore
 from .surfacing_agent import evaluate_surface
@@ -554,24 +559,33 @@ async def _draft_and_maybe_persist(
 
 
 # ---------------------------------------------------------------------------
-# /offers/alternatives — swipe-to-pick on-device price discovery (issue #132)
+# /offers/alternatives — cross-merchant swipe stack + LLM re-ranking
+# (issues #132 → #136)
 # ---------------------------------------------------------------------------
 #
 # Section is additive: nothing above touches these models or the endpoint.
-# Mechanic: the wallet drawer renders a 3-card swipeable stack of LLM-generated
-# offer variants escalating cheapest → most generous. Swipe right settles on a
-# variant; swipe left advances to the next. Dwell-time + swipe direction stay
-# on-device — backend just generates the ladder.
+# Mechanic: the wallet drawer renders a 3-card swipeable stack where each
+# card is a DIFFERENT merchant in the same (or close) category. Swipe right
+# settles on a merchant; swipe left advances to the next. Dwell-time +
+# swipe direction stay on-device EXCEPT when the next round opts into the
+# LLM re-ranker by passing `preference_context` — backend reorders the
+# candidate list by inferred preference (production swap: on-device SLM
+# per CLAUDE.md Demo Truth Boundary).
 
 
 class AlternativesRequest(BaseModel):
     """Body for `POST /offers/alternatives`.
 
-    Defaults match the canonical demo: 5%-25% range over 3 variants, fixtures
-    (no LLM call) for demo safety. Setting ``use_llm=True`` routes through the
-    existing Pydantic AI ``run_headline_rewrite_agent`` to rewrite each
-    variant headline by tone (conservative / balanced / aggressive); failures
-    fall back to the fixture headline silently.
+    Defaults match the canonical demo: 3 cross-merchant variants, fixtures
+    (no LLM call) for demo safety. Setting ``use_llm=True`` routes through
+    the existing Pydantic AI ``run_headline_rewrite_agent`` for per-card
+    headline rewrite. Setting ``preference_context`` triggers the
+    cross-merchant preference re-ranker (`preference_agent.py`).
+
+    ``base_discount_pct`` / ``max_discount_pct`` are kept on the wire for
+    backwards compatibility with the original price-escalation contract
+    (issue #132); the cross-merchant build path ignores them — each card
+    now carries its own merchant's offer.
     """
 
     merchant_id: str = Field(examples=["berlin-mitte-cafe-bondi"])
@@ -579,10 +593,25 @@ class AlternativesRequest(BaseModel):
     max_discount_pct: float = 25.0
     n: int = 3
     use_llm: bool = False
+    preference_context: list[PriorSwipe] | None = None
 
 
 class AlternativeOffer(BaseModel):
+    """One merchant card in the swipe stack.
+
+    Cross-merchant fields (`merchant_id`, `merchant_display_name`,
+    `merchant_category`, `distance_m`, `is_anchor`) carry the per-card
+    merchant identity so the mobile knows WHICH merchant the user picked
+    once they swipe right (and so the round's `PriorSwipe` log can be
+    fed back as `preference_context` next round).
+    """
+
     variant_id: str
+    merchant_id: str
+    merchant_display_name: str
+    merchant_category: str = ""
+    distance_m: int = 0
+    is_anchor: bool = False
     headline: str
     discount_pct: float
     discount_label: str
@@ -596,20 +625,41 @@ class AlternativesResponse(BaseModel):
 
 @app.post("/offers/alternatives", response_model=AlternativesResponse)
 async def post_offers_alternatives(req: AlternativesRequest) -> AlternativesResponse:
-    """Generate the swipe-stack variant ladder for one merchant.
+    """Generate the cross-merchant swipe stack for an anchor merchant.
 
-    Returns 404 when ``merchant_id`` isn't in any city catalog. Variants are
-    ordered cheapest → most generous so the mobile ``SwipeOfferStack`` can
-    display them top-of-stack-first and let the user swipe upward in price.
+    Returns 404 when ``merchant_id`` isn't in any city catalog. Each
+    variant in the response represents a DIFFERENT merchant in the same
+    (or a close) category, with the tapped merchant pinned as card 1 (the
+    anchor). When ``preference_context`` is supplied and contains ≥1
+    prior swipe, the candidate list is routed through
+    `preference_agent.rerank_candidates` to reorder by inferred user
+    preference; the anchor stays pinned at position 0.
     """
     variants = build_alternatives(
         merchant_id=req.merchant_id,
-        base_discount_pct=req.base_discount_pct,
-        max_discount_pct=req.max_discount_pct,
         n=req.n,
     )
     if variants is None:
         raise HTTPException(status_code=404, detail=f"Unknown merchant_id: {req.merchant_id}")
+
+    if req.preference_context:
+        catalog_lookup = build_catalog_lookup()
+        ranked_ids = await rerank_candidates(
+            candidates=variants,
+            history=req.preference_context,
+            catalog_lookup=catalog_lookup,
+            use_llm=req.use_llm,
+        )
+        by_id = {v["merchant_id"]: v for v in variants}
+        reordered: list[dict[str, Any]] = []
+        for mid in ranked_ids:
+            entry = by_id.pop(mid, None)
+            if entry is not None:
+                reordered.append(entry)
+        # Append any leftovers (shouldn't happen post-validation, but
+        # never drop a card we already built).
+        reordered.extend(by_id.values())
+        variants = reordered
 
     if req.use_llm:
         merchant = _lookup_merchant(req.merchant_id) or {"display_name": req.merchant_id}

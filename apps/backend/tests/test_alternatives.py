@@ -1,10 +1,15 @@
-"""Tests for `POST /offers/alternatives` (issue #132).
+"""Tests for `POST /offers/alternatives` (issues #132 → #136).
 
-Covers the swipe-to-pick variant ladder contract:
-  * 3 variants ordered cheapest → most generous.
-  * Each variant has a valid widget_spec (View root + Text + Pressable redeem).
-  * Custom n=5 returns 5 variants spanning floor → ceiling.
+Covers the cross-merchant swipe stack contract:
+  * 3 variants, each from a DIFFERENT merchant in the same (or close)
+    category — replaces the original price-escalation ladder.
+  * Tapped merchant is the anchor (card 1) so the user keeps the safety
+    of "I can take what I tapped".
+  * Each variant has a valid widget_spec (View root + Text + Pressable
+    redeem).
+  * Custom n is honoured (the response has ≤ n variants).
   * Unknown merchant_id returns 404.
+  * Unique `merchant_id` per variant — no duplicates in the stack.
 """
 
 from __future__ import annotations
@@ -46,35 +51,54 @@ def _find_pressable_action(node: dict) -> str | None:
     return None
 
 
-def test_default_returns_three_variants_ordered_cheapest_to_most_generous() -> None:
+def test_default_returns_three_cross_merchant_variants() -> None:
     response = client.post(
         "/offers/alternatives",
-        json={"merchant_id": "berlin-mitte-cafe-bondi"},
+        json={"merchant_id": "berlin-mitte-cafe-bondi", "n": 3},
     )
     assert response.status_code == 200
     payload = response.json()
     assert payload["merchant_id"] == "berlin-mitte-cafe-bondi"
     variants = payload["variants"]
     assert len(variants) == 3
-    discounts = [v["discount_pct"] for v in variants]
-    assert discounts == sorted(discounts), "variants must escalate cheapest → most generous"
-    # Default range is 5..25.
-    assert discounts[0] == 5.0
-    assert discounts[-1] == 25.0
+    # Cross-merchant invariant: every variant is a DIFFERENT merchant_id.
+    merchant_ids = [v["merchant_id"] for v in variants]
+    assert len(set(merchant_ids)) == len(merchant_ids), (
+        f"variants must be cross-merchant; got duplicates: {merchant_ids}"
+    )
+
+
+def test_anchor_merchant_is_card_one() -> None:
+    """The tapped merchant must be the anchor (position 0) so the user
+    keeps the safety of "I can take what I tapped"."""
+    response = client.post(
+        "/offers/alternatives",
+        json={"merchant_id": "berlin-mitte-cafe-bondi", "n": 3},
+    )
+    assert response.status_code == 200
+    variants = response.json()["variants"]
+    assert variants[0]["merchant_id"] == "berlin-mitte-cafe-bondi"
+    assert variants[0]["is_anchor"] is True
+    # Subsequent cards are not the anchor.
+    for v in variants[1:]:
+        assert v["is_anchor"] is False
 
 
 def test_each_variant_has_valid_widget_spec_shape() -> None:
     response = client.post(
         "/offers/alternatives",
-        json={"merchant_id": "berlin-mitte-cafe-bondi"},
+        json={"merchant_id": "berlin-mitte-cafe-bondi", "n": 3},
     )
     assert response.status_code == 200
     for variant in response.json()["variants"]:
-        # Headline + label populated.
         assert isinstance(variant["headline"], str) and variant["headline"]
         assert isinstance(variant["discount_label"], str) and variant["discount_label"]
-        assert variant["discount_label"].startswith("−")
         assert isinstance(variant["variant_id"], str) and variant["variant_id"]
+        assert isinstance(variant["merchant_id"], str) and variant["merchant_id"]
+        assert isinstance(variant["merchant_display_name"], str)
+        assert variant["merchant_display_name"] != ""
+        # variant_id == merchant_id under the new contract.
+        assert variant["variant_id"] == variant["merchant_id"]
 
         spec = variant["widget_spec"]
         assert isinstance(spec, dict)
@@ -89,23 +113,18 @@ def test_each_variant_has_valid_widget_spec_shape() -> None:
         assert action == "redeem", "widget_spec must contain a Pressable with action=redeem"
 
 
-def test_custom_n_returns_n_variants() -> None:
+def test_custom_n_returns_at_most_n_variants() -> None:
+    """Custom n caps the response. The cross-merchant builder may return
+    fewer if the candidate pool runs dry, but never more than n."""
     response = client.post(
         "/offers/alternatives",
-        json={
-            "merchant_id": "berlin-mitte-cafe-bondi",
-            "base_discount_pct": 5.0,
-            "max_discount_pct": 25.0,
-            "n": 5,
-        },
+        json={"merchant_id": "berlin-mitte-cafe-bondi", "n": 5},
     )
     assert response.status_code == 200
     variants = response.json()["variants"]
-    assert len(variants) == 5
-    discounts = [v["discount_pct"] for v in variants]
-    assert discounts == sorted(discounts)
-    assert discounts[0] == 5.0
-    assert discounts[-1] == 25.0
+    assert 1 <= len(variants) <= 5
+    merchant_ids = [v["merchant_id"] for v in variants]
+    assert len(set(merchant_ids)) == len(merchant_ids)
 
 
 def test_unknown_merchant_id_returns_404() -> None:
@@ -117,26 +136,79 @@ def test_unknown_merchant_id_returns_404() -> None:
     assert "nonexistent-merchant-xyz" in response.json()["detail"]
 
 
-def test_zurich_merchant_works_too() -> None:
-    """Catalog spans both cities; alternatives must work for any known id."""
+def test_zurich_merchant_returns_zurich_neighbours() -> None:
+    """Catalog spans both cities; alternatives must work for any known
+    id and stay within the same city (no Berlin cards in a Zurich
+    stack)."""
     response = client.post(
         "/offers/alternatives",
-        json={"merchant_id": "zurich-hb-le-cafe-61594"},
+        json={"merchant_id": "zurich-hb-le-cafe-61594", "n": 3},
     )
     assert response.status_code == 200
     variants = response.json()["variants"]
-    assert len(variants) == 3
-    # variant_id must embed the merchant id so the mobile can match-back.
+    assert len(variants) >= 1
     for variant in variants:
-        assert variant["variant_id"].startswith("zurich-hb-le-cafe-61594")
+        # Every card stays in the Zurich catalog.
+        assert variant["merchant_id"].startswith("zurich-"), (
+            f"cross-city card leaked: {variant['merchant_id']}"
+        )
 
 
-def test_variants_have_distinct_discount_labels() -> None:
-    """Avoid showing three identical labels — defeats the swipe-to-pick UX."""
+def test_anchor_card_works_when_anchor_has_no_active_offer() -> None:
+    """A merchant tapped from the catalog might not have an active_offer
+    of its own (e.g. exploring); the anchor card must still render with a
+    safe fallback."""
+    # `berlin-mitte-the-eatery-berlin-03070` has active_offer = None.
     response = client.post(
         "/offers/alternatives",
-        json={"merchant_id": "berlin-mitte-cafe-bondi"},
+        json={"merchant_id": "berlin-mitte-the-eatery-berlin-03070", "n": 3},
     )
     assert response.status_code == 200
-    labels = [v["discount_label"] for v in response.json()["variants"]]
-    assert len(set(labels)) == len(labels)
+    variants = response.json()["variants"]
+    assert len(variants) >= 1
+    assert variants[0]["merchant_id"] == "berlin-mitte-the-eatery-berlin-03070"
+    # Subsequent cards must still be cross-merchant + have offers.
+    for v in variants[1:]:
+        assert v["merchant_id"] != variants[0]["merchant_id"]
+
+
+def test_preference_context_reorders_candidates_anchor_pinned() -> None:
+    """Sending prior-swipe history with `use_llm=False` exercises the
+    deterministic heuristic re-rank. The anchor stays at position 0."""
+    # First, get the natural cross-merchant order so we know what to
+    # compare against.
+    natural = client.post(
+        "/offers/alternatives",
+        json={"merchant_id": "berlin-mitte-cafe-bondi", "n": 3},
+    )
+    assert natural.status_code == 200
+    natural_ids = [v["merchant_id"] for v in natural.json()["variants"]]
+    assert len(natural_ids) >= 2
+    # Build a preference context that fast-skipped a cafe and lingered
+    # on a bakery (signal: bias toward bakery candidates if any).
+    response = client.post(
+        "/offers/alternatives",
+        json={
+            "merchant_id": "berlin-mitte-cafe-bondi",
+            "n": 3,
+            "use_llm": False,
+            "preference_context": [
+                {
+                    "merchant_id": "berlin-mitte-the-barn-03005",
+                    "dwell_ms": 250,
+                    "swiped_right": False,
+                },
+                {
+                    "merchant_id": "berlin-mitte-zeit-fur-brot-03038",
+                    "dwell_ms": 4200,
+                    "swiped_right": True,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    reranked_ids = [v["merchant_id"] for v in response.json()["variants"]]
+    # Anchor still pinned at position 0.
+    assert reranked_ids[0] == "berlin-mitte-cafe-bondi"
+    # Same set of candidates (no additions, no drops).
+    assert set(reranked_ids) == set(natural_ids)

@@ -40,6 +40,7 @@ import {
   fetchOfferAlternatives,
   type AlternativeOffer,
   type MerchantListItem,
+  type PriorSwipe,
 } from "./src/lib/api";
 import { useSignals } from "./src/lib/useSignals";
 import { cityProfiles, type DemoCityId, type DemoCityProfile } from "./src/demo/cityProfiles";
@@ -125,6 +126,13 @@ export default function App() {
   // widget once the user swipes right (or left through every card → silent).
   const [alternatives, setAlternatives] = useState<AlternativeOffer[] | null>(null);
   const [settledVariant, setSettledVariant] = useState<AlternativeOffer | null>(null);
+  // Issue #136 — preference history persisted across swipe rounds in this
+  // session. Each round's PriorSwipe entries get appended; we send the
+  // accumulated history with the NEXT /offers/alternatives call so the
+  // backend's preference agent can re-rank cross-merchant candidates by
+  // inferred user taste. Resets on city swap (preferences don't transfer
+  // across cultural contexts; cf. DESIGN_PRINCIPLES.md #8).
+  const [swipeHistory, setSwipeHistory] = useState<PriorSwipe[]>([]);
   // DevPanel overlay state (issue #70). In compact mode (<820px) the
   // engineering surface lives behind the MapTopChip; tapping it slides the
   // full DevPanel in from the right. Wide mode keeps its sidecar layout.
@@ -215,6 +223,9 @@ export default function App() {
   const handleSwapCity = useCallback(() => {
     setCity((prev) => (prev === "berlin" ? "zurich" : "berlin"));
     setStep("silent");
+    // Reset swipe history on city swap — preferences for Berlin cafés
+    // shouldn't bias Zurich cafés (DESIGN_PRINCIPLES.md #8).
+    setSwipeHistory([]);
   }, []);
 
   const handleToggleHighIntent = useCallback(() => {
@@ -246,36 +257,80 @@ export default function App() {
   //   5) All-passed (3 left-swipes) → back to silent.
   // If the backend is unreachable / returns null, gracefully fall back to
   // the legacy single-card focused offer view so the demo stays recordable.
-  const handleMerchantTap = useCallback(async (merchant: MerchantListItem) => {
-    if (!merchant.active_offer) return;
-    // Reset any prior settled variant so the offer step renders the focused
-    // demo widget while we wait for alternatives.
-    setSettledVariant(null);
-    const res = await fetchOfferAlternatives(merchant.id);
-    if (!res || res.variants.length === 0) {
-      // Demo-safety fallback: skip the swipe stack and route straight to
-      // the focused offer view. Matches the pre-#132 behaviour exactly.
-      setAlternatives(null);
-      setStep("offer");
-      return;
-    }
-    setAlternatives(res.variants);
-    setStep("alternatives");
-  }, []);
-
-  const handleAlternativesSettle = useCallback(
-    (variant: AlternativeOffer) => {
-      setSettledVariant(variant);
-      setStep("offer");
+  const handleMerchantTap = useCallback(
+    async (merchant: MerchantListItem) => {
+      if (!merchant.active_offer) return;
+      // Reset any prior settled variant so the offer step renders the focused
+      // demo widget while we wait for alternatives.
+      setSettledVariant(null);
+      // Send the accumulated swipe history so the backend preference agent
+      // re-ranks the next round by inferred preference. Empty history on
+      // first tap of the session → backend uses deterministic distance sort.
+      const res = await fetchOfferAlternatives(
+        merchant.id,
+        swipeHistory.length > 0 ? swipeHistory : undefined,
+      );
+      if (!res || res.variants.length === 0) {
+        // Demo-safety fallback: skip the swipe stack and route straight to
+        // the focused offer view. Matches the pre-#132 behaviour exactly.
+        setAlternatives(null);
+        setStep("offer");
+        return;
+      }
+      setAlternatives(res.variants);
+      setStep("alternatives");
     },
+    [swipeHistory],
+  );
+
+  // Build PriorSwipe[] entries from a finished round's dwell map. The
+  // settled variant is `swiped_right: true`; everything else the user saw
+  // in this round is `swiped_right: false`. Variants the user never reached
+  // (no dwell entry) are dropped — only emit signals the user actually saw.
+  const buildPriorSwipes = useCallback(
+    (
+      dwellByVariant: Record<string, number>,
+      settled: AlternativeOffer | null,
+      roundVariants: AlternativeOffer[],
+    ): PriorSwipe[] =>
+      roundVariants
+        .filter((v) => dwellByVariant[v.variant_id] !== undefined)
+        .map((v) => ({
+          merchant_id: v.merchant_id,
+          dwell_ms: Math.max(0, Math.round(dwellByVariant[v.variant_id] ?? 0)),
+          swiped_right: settled?.variant_id === v.variant_id,
+        })),
     [],
   );
 
-  const handleAlternativesAllPassed = useCallback(() => {
-    setSettledVariant(null);
-    setAlternatives(null);
-    setStep("silent");
-  }, []);
+  const handleAlternativesSettle = useCallback(
+    (variant: AlternativeOffer, dwellByVariant: Record<string, number>) => {
+      if (alternatives) {
+        const newSwipes = buildPriorSwipes(dwellByVariant, variant, alternatives);
+        if (newSwipes.length > 0) {
+          setSwipeHistory((prev) => [...prev, ...newSwipes]);
+        }
+      }
+      setSettledVariant(variant);
+      setStep("offer");
+    },
+    [alternatives, buildPriorSwipes],
+  );
+
+  const handleAlternativesAllPassed = useCallback(
+    (dwellByVariant: Record<string, number>) => {
+      if (alternatives) {
+        const newSwipes = buildPriorSwipes(dwellByVariant, null, alternatives);
+        if (newSwipes.length > 0) {
+          setSwipeHistory((prev) => [...prev, ...newSwipes]);
+        }
+      }
+      setSettledVariant(null);
+      setAlternatives(null);
+      setStep("silent");
+    },
+    [alternatives, buildPriorSwipes],
+  );
 
   const handleSheetChange = useCallback((index: number) => {
     setSheetIndex(index);
@@ -776,10 +831,16 @@ type SheetBodyProps = {
   /** Threaded down to MerchantSearchList's <TextInput onFocus> so tapping
    *  the search bar auto-snaps the sheet to its 80% top snap. Issue #125. */
   onSearchFocus: ComponentProps<typeof WalletSheetContent>["onSearchFocus"];
-  /** Issue #132 — fired when the user swipes right on a stack card. */
-  onAlternativesSettle: (variant: AlternativeOffer) => void;
-  /** Issue #132 — fired when the user swipes left through every card. */
-  onAlternativesAllPassed: () => void;
+  /** Issue #132 + #136 — fired when the user swipes right on a stack
+   *  card. App.tsx uses the dwell map to build PriorSwipe entries for
+   *  the next round's preference re-ranking. */
+  onAlternativesSettle: (
+    variant: AlternativeOffer,
+    dwellByVariant: Record<string, number>,
+  ) => void;
+  /** Issue #132 + #136 — fired when the user swipes left through every
+   *  card. Same dwell-map shape as onAlternativesSettle. */
+  onAlternativesAllPassed: (dwellByVariant: Record<string, number>) => void;
 };
 
 function SheetBody({
@@ -844,7 +905,9 @@ function SheetBody({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to wallet"
-          onPress={onAlternativesAllPassed}
+          // Chevron exit isn't a swipe round — pass an empty dwell map so
+          // we don't pollute the preference signal with a non-decision.
+          onPress={() => onAlternativesAllPassed({})}
           hitSlop={12}
           style={({ pressed }) => [
             ...s("flex-row items-center"),

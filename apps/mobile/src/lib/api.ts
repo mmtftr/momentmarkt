@@ -570,6 +570,15 @@ export async function fetchHistory(
 
 export type AlternativeOffer = {
   variant_id: string;
+  /** Cross-merchant identity (issue #136). The variant is now a different
+   *  merchant per card, not a price-point of one merchant. */
+  merchant_id: string;
+  merchant_display_name: string;
+  /** cafe | bakery | bookstore | kiosk | restaurant | bar | boutique | ice_cream | florist */
+  merchant_category?: string;
+  distance_m?: number;
+  /** True for card 1 — the merchant the user originally tapped. */
+  is_anchor?: boolean;
   headline: string;
   discount_pct: number;
   /** Display string like "−10%" — already formatted by the backend. */
@@ -584,26 +593,52 @@ export type AlternativesResponse = {
 };
 
 /**
- * Fetch the 3-card swipe-stack variant ladder for a merchant. Default body
- * matches the backend defaults (5..25% over 3 variants, no LLM). Returns
- * `null` on any failure so SwipeOfferStack callers can collapse the extra
- * hop and route straight to the focused offer view.
+ * One prior-round swipe the mobile feeds back to the backend so the LLM
+ * preference agent can re-rank the next round's candidates by inferred
+ * preference. Per CLAUDE.md's Demo Truth Boundary, this leaves the device
+ * only because the LLM lives there for the demo — production swap is the
+ * on-device SLM (Phi-3 / Gemma) reading the same shape.
+ */
+export type PriorSwipe = {
+  merchant_id: string;
+  dwell_ms: number;
+  swiped_right: boolean;
+};
+
+/**
+ * Fetch the cross-merchant swipe stack for a merchant. Default body
+ * matches the backend defaults (3 variants, no LLM). When
+ * `preferenceContext` is supplied the backend routes the candidate list
+ * through `preference_agent.py` for re-ranking by inferred preference;
+ * the anchor merchant stays pinned at position 0 either way. Returns
+ * `null` on any failure so SwipeOfferStack callers can collapse the
+ * extra hop and route straight to the focused offer view.
  */
 export async function fetchOfferAlternatives(
   merchantId: string,
+  preferenceContext?: PriorSwipe[],
   signal?: AbortSignal,
 ): Promise<AlternativesResponse | null> {
   try {
+    const body: Record<string, unknown> = {
+      merchant_id: merchantId,
+      n: 3,
+      // use_llm flips both the headline rewrite + the LLM-driven
+      // preference re-rank. Keep false on the wire by default for demo
+      // safety — the deterministic heuristic still re-ranks.
+      use_llm: false,
+    };
+    if (preferenceContext && preferenceContext.length > 0) {
+      body.preference_context = preferenceContext.map((p) => ({
+        merchant_id: p.merchant_id,
+        dwell_ms: Math.max(0, Math.round(p.dwell_ms)),
+        swiped_right: p.swiped_right,
+      }));
+    }
     const r = await fetch(`${apiBase()}/offers/alternatives`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        merchant_id: merchantId,
-        base_discount_pct: 5,
-        max_discount_pct: 25,
-        n: 3,
-        use_llm: false,
-      }),
+      body: JSON.stringify(body),
       signal,
     });
     if (!r.ok) return null;
@@ -619,6 +654,8 @@ export async function fetchOfferAlternatives(
         (v): v is AlternativeOffer =>
           !!v &&
           typeof (v as AlternativeOffer).variant_id === "string" &&
+          typeof (v as AlternativeOffer).merchant_id === "string" &&
+          typeof (v as AlternativeOffer).merchant_display_name === "string" &&
           typeof (v as AlternativeOffer).headline === "string" &&
           typeof (v as AlternativeOffer).discount_pct === "number" &&
           typeof (v as AlternativeOffer).discount_label === "string" &&
@@ -627,6 +664,12 @@ export async function fetchOfferAlternatives(
       )
       .map((v) => ({
         variant_id: v.variant_id,
+        merchant_id: v.merchant_id,
+        merchant_display_name: v.merchant_display_name,
+        merchant_category:
+          typeof v.merchant_category === "string" ? v.merchant_category : undefined,
+        distance_m: typeof v.distance_m === "number" ? v.distance_m : undefined,
+        is_anchor: typeof v.is_anchor === "boolean" ? v.is_anchor : undefined,
         headline: v.headline,
         discount_pct: v.discount_pct,
         discount_label: v.discount_label,
