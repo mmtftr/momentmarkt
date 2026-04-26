@@ -99,20 +99,6 @@ function App() {
               <small>Berlin Mitte · City Pilot</small>
             </div>
           </div>
-          <button
-            type="button"
-            className="ob-link ob-reset"
-            onClick={() => {
-              try {
-                localStorage.removeItem(ONBOARDED_FLAG);
-              } catch {
-                /* ignore */
-              }
-              setOnboardedState(false);
-            }}
-          >
-            Re-run onboarding
-          </button>
         </div>
       </aside>
 
@@ -127,7 +113,18 @@ function App() {
           <OffersSection focusedOfferId={focusedOfferId} clearFocus={clearFocus} />
         ) : null}
         {active === "bounds" ? <BoundsSection /> : null}
-        {active === "settings" ? <SettingsSection /> : null}
+        {active === "settings" ? (
+          <SettingsSection
+            onResetOnboarding={() => {
+              try {
+                localStorage.removeItem(ONBOARDED_FLAG);
+              } catch {
+                /* ignore */
+              }
+              setOnboardedState(false);
+            }}
+          />
+        ) : null}
       </section>
     </main>
   );

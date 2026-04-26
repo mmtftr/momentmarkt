@@ -169,17 +169,37 @@ code {
 
 .rail-item.is-active {
   background: var(--cream-soft);
-  border-color: var(--hairline);
+  border: none;
+  border-radius: 0 10px 10px 0;
   color: var(--ink);
-  box-shadow: inset 3px 0 0 var(--cocoa);
+  box-shadow: none;
+  position: relative;
+  margin-left: -14px;
+  padding-left: 23px;
+}
+
+.rail-item.is-active::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 3px;
+  background: var(--cocoa);
+  border-radius: 0 2px 2px 0;
 }
 
 .rail-icon {
   color: currentColor;
+  transition: color 140ms ease;
 }
 
 .rail-item.is-active .rail-icon {
   color: var(--cocoa);
+}
+
+.rail-item:active:not(.is-active) {
+  transform: scale(0.985);
 }
 
 .rail-item-text {
@@ -1940,9 +1960,13 @@ code {
     radial-gradient(ellipse 1100px 600px at 50% -10%, rgba(242, 84, 45, 0.08), transparent 60%),
     radial-gradient(ellipse 800px 600px at 90% 100%, rgba(111, 63, 44, 0.08), transparent 60%),
     linear-gradient(180deg, var(--cream) 0%, var(--cream-soft) 100%);
-  padding: 80px clamp(20px, 4vw, 80px) 64px;
+  padding: 56px clamp(20px, 4vw, 80px);
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  /* `safe center` keeps the top of the card visible when content is taller
+   * than the viewport (e.g., the hours step). */
+  justify-content: safe center;
 }
 
 .ob-mark {
@@ -1968,7 +1992,7 @@ code {
   max-width: 880px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 28px;
 }
 
@@ -5098,4 +5122,89 @@ code {
 .chip:active:not(:disabled),
 .ob-chip:active:not(:disabled) {
   transform: scale(0.95);
+}
+
+/* === Dashboard motion polish === */
+
+/* Section content swap: same fade+lift as onboarding steps */
+.section-body {
+  animation: ob-step-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Section head: subtle stagger on the inner blocks */
+.section-head {
+  animation: ob-step-in 380ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both;
+}
+
+/* Feed cards / detail panels / bounds cards / chart panels enter with stagger */
+.feed-card,
+.bounds-card,
+.detail-section,
+.metric-card,
+.insight-card,
+.audit-row {
+  animation: ob-card-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.feed-card:nth-of-type(1),
+.bounds-card:nth-of-type(1),
+.detail-section:nth-of-type(1),
+.metric-card:nth-of-type(1),
+.insight-card:nth-of-type(1),
+.audit-row:nth-of-type(1) { animation-delay: 80ms; }
+.feed-card:nth-of-type(2),
+.bounds-card:nth-of-type(2),
+.detail-section:nth-of-type(2),
+.metric-card:nth-of-type(2),
+.insight-card:nth-of-type(2),
+.audit-row:nth-of-type(2) { animation-delay: 140ms; }
+.feed-card:nth-of-type(3),
+.bounds-card:nth-of-type(3),
+.detail-section:nth-of-type(3),
+.metric-card:nth-of-type(3),
+.insight-card:nth-of-type(3),
+.audit-row:nth-of-type(3) { animation-delay: 200ms; }
+.feed-card:nth-of-type(4),
+.bounds-card:nth-of-type(4),
+.detail-section:nth-of-type(4),
+.metric-card:nth-of-type(4),
+.insight-card:nth-of-type(4),
+.audit-row:nth-of-type(4) { animation-delay: 260ms; }
+.feed-card:nth-of-type(5),
+.bounds-card:nth-of-type(5),
+.detail-section:nth-of-type(5),
+.audit-row:nth-of-type(5) { animation-delay: 320ms; }
+
+/* Rail items: weighted hover/press */
+.rail-item {
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Section nav reveal: when sections become live, the dot pulses */
+.rail-live-dot {
+  animation: ob-dot-active 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Status badges, counters, etc. soft-fade when they update */
+.metric-card strong,
+.counter-value,
+.budget-fill {
+  transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1), color 240ms ease;
+}
+
+/* Reduced-motion respect on dashboard too */
+@media (prefers-reduced-motion: reduce) {
+  .section-body,
+  .section-head,
+  .feed-card,
+  .bounds-card,
+  .detail-section,
+  .metric-card,
+  .insight-card,
+  .audit-row {
+    animation: none;
+  }
 }

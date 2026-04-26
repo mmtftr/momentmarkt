@@ -24,7 +24,11 @@ const DAYS: { id: DayKey; label: string }[] = [
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
-export function SettingsSection() {
+type SettingsProps = {
+  onResetOnboarding?: () => void;
+};
+
+export function SettingsSection({ onResetOnboarding }: SettingsProps = {}) {
   const [notifAccepted, setNotifAccepted] = useState(true);
   const [notifRedeemed, setNotifRedeemed] = useState(true);
   const [notifBudgetLow, setNotifBudgetLow] = useState(true);
@@ -170,6 +174,19 @@ export function SettingsSection() {
           </ul>
           <button type="button" className="ghost-button">+ Invite teammate</button>
         </article>
+
+        {onResetOnboarding ? (
+          <article className="settings-card settings-card-wide">
+            <h2>Restart setup</h2>
+            <p className="bounds-help">
+              Re-run the onboarding flow if you want to re-import your menu or change your
+              storefront details from scratch.
+            </p>
+            <button type="button" className="ghost-button" onClick={onResetOnboarding}>
+              Re-run onboarding
+            </button>
+          </article>
+        ) : null}
       </section>
 
       <footer className="section-foot">
