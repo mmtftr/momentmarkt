@@ -1,18 +1,24 @@
 """Static merchant catalog for the wallet drawer search surface.
 
-This module powers `GET /merchants/{city}` (issue #115). The catalog is a
-hand-curated, hackathon-safe expansion of the 4 canonical merchants in
-``data/transactions/berlin-density.json`` so the mobile drawer can render
-"search + Offers for you" without depending on a real geo backend.
+This module powers ``GET /merchants/{city}`` (issue #115). The Berlin
+catalog is hydrated from real OpenStreetMap (Overpass API) places near
+Mia's demo center (lat 52.5301, lon 13.4012; near Rosenthaler Platz)
+captured 2026-04-26. The 4 canonical density-fixture merchants are
+preserved verbatim so signals, density curves, and surfacing keep
+working. The remaining ~31 entries are real Berlin Mitte POIs (cafes,
+bakeries, bars, bookstores, etc.) so the wallet drawer renders
+recognisable names like "St. Oberholz", "Zeit für Brot", "ocelot",
+"Mein Haus am See" instead of synthetic ones.
 
-Distances are pre-computed from Mia's demo position (Berlin: lat 52.5301,
-lon 13.4012; near Rosenthaler Platz). Zurich distances are from the HB
-demo center (lat 47.3780, lon 8.5403). The 4 canonical Berlin merchants
-keep their existing ids so the rest of the demo (signals, surfacing,
-density chart) keeps working.
+Distances are computed via haversine from Mia's center; all entries
+are within 500m of her. Active offers are carried over from the
+previous synthetic catalog and re-attached to OSM merchants whose
+category matches the original offer's vibe (~12 of ~35 in Berlin,
+~3 of 8 in Zurich). Cafe Bondi's offer is locked to the rain-trigger
+demo copy.
 
-Active offers are intentionally sparse (~12 of ~34 in Berlin, ~3 of 8 in
-Zurich). Cafe Bondi's offer is locked to the rain-trigger demo copy.
+Zurich catalog stays fully synthetic for now (out of scope for the
+OSM scrape).
 """
 
 from __future__ import annotations
@@ -62,16 +68,20 @@ def _offer(headline: str, discount: str, expires: str = "2026-04-26T18:00:00+02:
 
 
 # ---------------------------------------------------------------------------
-# Berlin catalog (~34 merchants)
+# Berlin catalog (~35 merchants)
 # ---------------------------------------------------------------------------
 #
-# The first four entries are the canonical density-fixture merchants. Their
-# ``id`` values MUST match data/transactions/berlin-density.json. Cafe Bondi
-# additionally carries the rain-trigger demo offer.
+# Layout:
+#   1) The 4 canonical density-fixture merchants (frozen ids; Cafe Bondi
+#      first because the rain-trigger demo cut depends on it).
+#   2) Real OpenStreetMap POIs around Mia's center, sorted by distance.
+#      Names preserve the OSM ``name`` tag verbatim (umlauts intact).
+#      Distances are haversine metres from (52.5301, 13.4012). Slug ids
+#      embed a short lat-derived suffix to avoid collisions across
+#      future scrapes.
 #
-# Remaining entries are synthetic but use realistic Berlin Mitte names and
-# plausible distances/neighborhoods. Distances were eyeballed against
-# OpenStreetMap from Rosenthaler Platz; they are demo-grade only.
+# 12 entries carry an ``active_offer``; the rest are ``None`` so the
+# wallet drawer's "Offers for you" pill shows a credible mix.
 
 _BERLIN_MERCHANTS: list[dict[str, Any]] = [
     # --- Canonical (must stay in catalog, ids frozen) -----------------------
@@ -111,171 +121,12 @@ _BERLIN_MERCHANTS: list[dict[str, Any]] = [
             "Buy one scoop, get one half-price", "50% 2nd", "2026-04-26T19:00:00+02:00"
         ),
     },
-    # --- Cafes --------------------------------------------------------------
+    # --- Real OSM merchants near Rosenthaler Platz --------------------------
     {
-        "id": "berlin-mitte-cafe-cinema",
-        "display_name": "Cafe Cinema",
-        "category": "cafe",
-        "distance_m": 410,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-mitte-the-barn-roastery",
-        "display_name": "The Barn Roastery",
-        "category": "cafe",
-        "distance_m": 720,
-        "neighborhood": "Mitte",
-        "active_offer": _offer("€2 off any pour-over", "€2 off"),
-    },
-    {
-        "id": "berlin-prenzlauerberg-bonanza-coffee",
-        "display_name": "Bonanza Coffee Roasters",
-        "category": "cafe",
-        "distance_m": 1180,
-        "neighborhood": "Prenzlauer Berg",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-mitte-cafe-nullpunkt",
-        "display_name": "Cafe Nullpunkt",
-        "category": "cafe",
-        "distance_m": 230,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    # --- Bakeries -----------------------------------------------------------
-    {
-        "id": "berlin-mitte-baeckerei-siebert",
-        "display_name": "Bäckerei Siebert",
-        "category": "bakery",
-        "distance_m": 290,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-mitte-zeit-fuer-brot",
-        "display_name": "Zeit für Brot",
-        "category": "bakery",
-        "distance_m": 95,
-        "neighborhood": "Mitte",
-        "active_offer": _offer(
-            "Cinnamon roll + filter coffee €5",
-            "Bundle €5",
-            "2026-04-26T11:30:00+02:00",
-        ),
-    },
-    {
-        "id": "berlin-prenzlauerberg-baeckerei-domberger",
-        "display_name": "Bäckerei Domberger",
-        "category": "bakery",
-        "distance_m": 1320,
-        "neighborhood": "Prenzlauer Berg",
-        "active_offer": None,
-    },
-    # --- Bookstores ---------------------------------------------------------
-    {
-        "id": "berlin-mitte-buchhandlung-walther-koenig",
-        "display_name": "Buchhandlung Walther König",
-        "category": "bookstore",
-        "distance_m": 640,
-        "neighborhood": "Mitte",
-        "active_offer": _offer(
-            "15% off art books this weekend", "−15%", "2026-04-26T20:00:00+02:00"
-        ),
-    },
-    {
-        "id": "berlin-mitte-do-you-read-me",
-        "display_name": "do you read me?!",
-        "category": "bookstore",
-        "distance_m": 320,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-friedrichshain-shakespeare-und-soehne",
-        "display_name": "Shakespeare und Söhne",
-        "category": "bookstore",
-        "distance_m": 1450,
-        "neighborhood": "Friedrichshain",
-        "active_offer": None,
-    },
-    # --- Kiosks / Spätis ----------------------------------------------------
-    {
-        "id": "berlin-mitte-spaeti-am-hackeschen-markt",
-        "display_name": "Späti am Hackeschen Markt",
-        "category": "kiosk",
-        "distance_m": 470,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-mitte-kiosk-rosenthaler-platz",
-        "display_name": "Kiosk Rosenthaler Platz",
-        "category": "kiosk",
-        "distance_m": 60,
-        "neighborhood": "Mitte",
-        "active_offer": _offer(
-            "2 Club-Mate for €4", "€1 off", "2026-04-26T22:00:00+02:00"
-        ),
-    },
-    {
-        "id": "berlin-prenzlauerberg-spaeti-kastanienallee",
-        "display_name": "Späti Kastanienallee",
-        "category": "kiosk",
-        "distance_m": 980,
-        "neighborhood": "Prenzlauer Berg",
-        "active_offer": None,
-    },
-    # --- Restaurants --------------------------------------------------------
-    {
-        "id": "berlin-mitte-restaurant-zur-letzten-instanz",
-        "display_name": "Zur letzten Instanz",
-        "category": "restaurant",
-        "distance_m": 1100,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-mitte-monsieur-vuong",
-        "display_name": "Monsieur Vuong",
-        "category": "restaurant",
-        "distance_m": 380,
-        "neighborhood": "Mitte",
-        "active_offer": _offer(
-            "Pho + iced tea €12 lunch deal", "Lunch €12", "2026-04-26T16:00:00+02:00"
-        ),
-    },
-    {
-        "id": "berlin-mitte-mogg-deli",
-        "display_name": "Mogg Deli",
-        "category": "restaurant",
-        "distance_m": 510,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-friedrichshain-burgermeister",
-        "display_name": "Burgermeister Schlesisches Tor",
-        "category": "restaurant",
-        "distance_m": 1480,
-        "neighborhood": "Friedrichshain",
-        "active_offer": None,
-    },
-    # --- Bars ---------------------------------------------------------------
-    {
-        "id": "berlin-mitte-buck-and-breck",
-        "display_name": "Buck and Breck",
+        "id": "berlin-mitte-mein-haus-am-see-02998",
+        "display_name": "Mein Haus am See",
         "category": "bar",
-        "distance_m": 760,
-        "neighborhood": "Mitte",
-        "active_offer": None,
-    },
-    {
-        "id": "berlin-mitte-clarchens-ballhaus",
-        "display_name": "Clärchens Ballhaus",
-        "category": "bar",
-        "distance_m": 480,
+        "distance_m": 29,
         "neighborhood": "Mitte",
         "active_offer": _offer(
             "Happy hour spritz €6 until 19:00",
@@ -284,63 +135,168 @@ _BERLIN_MERCHANTS: list[dict[str, Any]] = [
         ),
     },
     {
-        "id": "berlin-prenzlauerberg-prater-garten",
-        "display_name": "Prater Garten",
+        "id": "berlin-mitte-sharlie-cheen-bar-03019",
+        "display_name": "Sharlie Cheen Bar",
         "category": "bar",
-        "distance_m": 1240,
-        "neighborhood": "Prenzlauer Berg",
-        "active_offer": None,
-    },
-    # --- Boutiques ----------------------------------------------------------
-    {
-        "id": "berlin-mitte-voo-store",
-        "display_name": "Voo Store",
-        "category": "boutique",
-        "distance_m": 690,
+        "distance_m": 37,
         "neighborhood": "Mitte",
         "active_offer": None,
     },
     {
-        "id": "berlin-mitte-andreas-murkudis",
-        "display_name": "Andreas Murkudis",
-        "category": "boutique",
-        "distance_m": 1390,
+        "id": "berlin-mitte-the-barn-03005",
+        "display_name": "The Barn",
+        "category": "cafe",
+        "distance_m": 39,
+        "neighborhood": "Mitte",
+        "active_offer": _offer("€2 off any pour-over", "€2 off"),
+    },
+    {
+        "id": "berlin-mitte-huong-que-03039",
+        "display_name": "Huong Quê",
+        "category": "restaurant",
+        "distance_m": 40,
+        "neighborhood": "Mitte",
+        "active_offer": _offer(
+            "Pho + iced tea €12 lunch deal", "Lunch €12", "2026-04-26T16:00:00+02:00"
+        ),
+    },
+    {
+        "id": "berlin-mitte-rosies-03015",
+        "display_name": "Rosie's",
+        "category": "bar",
+        "distance_m": 45,
         "neighborhood": "Mitte",
         "active_offer": None,
     },
     {
-        "id": "berlin-mitte-soto-store",
-        "display_name": "Soto Store",
+        "id": "berlin-mitte-crosta-03046",
+        "display_name": "Crosta",
+        "category": "restaurant",
+        "distance_m": 49,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-100-gramm-lounge-03052",
+        "display_name": "100 Gramm Lounge",
+        "category": "bar",
+        "distance_m": 57,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-fam-dang-02977",
+        "display_name": "Fam. Dang",
+        "category": "restaurant",
+        "distance_m": 61,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-zeit-fur-brot-03038",
+        "display_name": "Zeit für Brot",
+        "category": "bakery",
+        "distance_m": 66,
+        "neighborhood": "Mitte",
+        "active_offer": _offer(
+            "Cinnamon roll + filter coffee €5",
+            "Bundle €5",
+            "2026-04-26T11:30:00+02:00",
+        ),
+    },
+    {
+        "id": "berlin-mitte-late-night-shop-02949",
+        "display_name": "Late Night Shop",
+        "category": "kiosk",
+        "distance_m": 68,
+        "neighborhood": "Mitte",
+        "active_offer": _offer(
+            "2 Club-Mate for €4", "€1 off", "2026-04-26T22:00:00+02:00"
+        ),
+    },
+    {
+        "id": "berlin-mitte-aiko-03053",
+        "display_name": "Aiko",
+        "category": "restaurant",
+        "distance_m": 73,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-st-oberholz-02953",
+        "display_name": "St. Oberholz",
+        "category": "cafe",
+        "distance_m": 75,
+        "neighborhood": "Mitte",
+        "active_offer": _offer(
+            "Free pastry with any pour-over",
+            "Free side",
+            "2026-04-26T17:00:00+02:00",
+        ),
+    },
+    {
+        "id": "berlin-mitte-rotation-boutique-03047",
+        "display_name": "Rotation Boutique",
         "category": "boutique",
-        "distance_m": 540,
+        "distance_m": 75,
         "neighborhood": "Mitte",
         "active_offer": _offer(
             "10% off raincoats today only", "−10%", "2026-04-26T20:00:00+02:00"
         ),
     },
-    # --- Ice cream ----------------------------------------------------------
     {
-        "id": "berlin-mitte-rosa-canina",
-        "display_name": "Rosa Canina Eis",
-        "category": "ice_cream",
-        "distance_m": 350,
+        "id": "berlin-mitte-the-eatery-berlin-03070",
+        "display_name": "The Eatery Berlin",
+        "category": "restaurant",
+        "distance_m": 78,
         "neighborhood": "Mitte",
         "active_offer": None,
     },
     {
-        "id": "berlin-prenzlauerberg-jones-ice-cream",
-        "display_name": "Jones Ice Cream",
-        "category": "ice_cream",
-        "distance_m": 1080,
-        "neighborhood": "Prenzlauer Berg",
+        "id": "berlin-mitte-mod-coffee-03063",
+        "display_name": "Mod Coffee",
+        "category": "cafe",
+        "distance_m": 84,
+        "neighborhood": "Mitte",
         "active_offer": None,
     },
-    # --- Florists -----------------------------------------------------------
     {
-        "id": "berlin-mitte-marsano-blumen",
-        "display_name": "Marsano Blumen",
+        "id": "berlin-mitte-supercoff-03078",
+        "display_name": "Supercoff",
+        "category": "cafe",
+        "distance_m": 88,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-aera-02940",
+        "display_name": "AERA",
+        "category": "bakery",
+        "distance_m": 90,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-croissant-couture-03062",
+        "display_name": "Croissant Couture",
+        "category": "cafe",
+        "distance_m": 92,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-flat-white-03084",
+        "display_name": "flat white",
+        "category": "cafe",
+        "distance_m": 96,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-blumen-vanessa-02995",
+        "display_name": "Blumen Vanessa",
         "category": "florist",
-        "distance_m": 220,
+        "distance_m": 96,
         "neighborhood": "Mitte",
         "active_offer": _offer(
             "Tulip bunch €7 (was €10)",
@@ -349,47 +305,133 @@ _BERLIN_MERCHANTS: list[dict[str, Any]] = [
         ),
     },
     {
-        "id": "berlin-mitte-blumen-koenig",
-        "display_name": "Blumen König",
-        "category": "florist",
-        "distance_m": 410,
+        "id": "berlin-mitte-vertere-03094",
+        "display_name": "Vertere",
+        "category": "boutique",
+        "distance_m": 108,
         "neighborhood": "Mitte",
         "active_offer": None,
     },
     {
-        "id": "berlin-prenzlauerberg-marsano-kollwitz",
-        "display_name": "Marsano Kollwitzplatz",
-        "category": "florist",
-        "distance_m": 1260,
-        "neighborhood": "Prenzlauer Berg",
+        "id": "berlin-mitte-linerie-02903",
+        "display_name": "Linerie",
+        "category": "boutique",
+        "distance_m": 119,
+        "neighborhood": "Mitte",
         "active_offer": None,
     },
-    # --- Extras to round out the count --------------------------------------
     {
-        "id": "berlin-mitte-spaeti-torstrasse",
-        "display_name": "Späti Torstraße",
+        "id": "berlin-mitte-asthetik-movement-03105",
+        "display_name": "ästhetik movement",
+        "category": "boutique",
+        "distance_m": 121,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-suesse-suende-03109",
+        "display_name": "Süße Sünde",
+        "category": "ice_cream",
+        "distance_m": 126,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-the-market-02965",
+        "display_name": "The Market",
         "category": "kiosk",
-        "distance_m": 140,
+        "distance_m": 144,
         "neighborhood": "Mitte",
         "active_offer": None,
     },
     {
-        "id": "berlin-mitte-cafe-fes",
-        "display_name": "Cafe Fes",
-        "category": "cafe",
-        "distance_m": 880,
+        "id": "berlin-mitte-hokey-pokey-02964",
+        "display_name": "Hokey Pokey",
+        "category": "ice_cream",
+        "distance_m": 171,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-ocelot-03172",
+        "display_name": "ocelot",
+        "category": "bookstore",
+        "distance_m": 220,
         "neighborhood": "Mitte",
         "active_offer": _offer(
-            "Free baklava with any tea",
-            "Free side",
-            "2026-04-26T17:00:00+02:00",
+            "15% off art books this weekend", "−15%", "2026-04-26T20:00:00+02:00"
         ),
+    },
+    {
+        "id": "berlin-mitte-getraenkekiosk-03185",
+        "display_name": "Getränkekiosk",
+        "category": "kiosk",
+        "distance_m": 235,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-acid-mitte-02798",
+        "display_name": "Acid Mitte",
+        "category": "bakery",
+        "distance_m": 253,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-rosa-canina-02890",
+        "display_name": "Rosa Canina",
+        "category": "ice_cream",
+        "distance_m": 286,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-buchhandlung-a-livraria-02933",
+        "display_name": "Buchhandlung a Livraria",
+        "category": "bookstore",
+        "distance_m": 329,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-antiquariat-wiederhold-03139",
+        "display_name": "Antiquariat Wiederhold",
+        "category": "bookstore",
+        "distance_m": 338,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-bio-konditorei-tillmann-02729",
+        "display_name": "Bio-Konditorei Tillmann",
+        "category": "bakery",
+        "distance_m": 385,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-floristik-live-03346",
+        "display_name": "Floristik live",
+        "category": "florist",
+        "distance_m": 423,
+        "neighborhood": "Mitte",
+        "active_offer": None,
+    },
+    {
+        "id": "berlin-mitte-blumen-jaeger-03399",
+        "display_name": "Blumen Jäger",
+        "category": "florist",
+        "distance_m": 476,
+        "neighborhood": "Mitte",
+        "active_offer": None,
     },
 ]
 
 
 # ---------------------------------------------------------------------------
-# Zurich catalog (~8 merchants, neighborhood "HB")
+# Zurich catalog (~8 merchants, neighborhood "HB") — synthetic, out of scope
+# for the OSM scrape.
 # ---------------------------------------------------------------------------
 
 _ZURICH_MERCHANTS: list[dict[str, Any]] = [
