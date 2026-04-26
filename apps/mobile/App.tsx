@@ -506,9 +506,11 @@ export default function App() {
                 >
                   <Animated.View style={topOverlayLeftStyle}>
                     <MapWeatherPill
-                      tempC={citySignals.tempC}
+                      cityName={city === "berlin" ? "Berlin" : "Zurich"}
                       neighborhood={city === "berlin" ? "Mitte" : "HB"}
+                      tempC={citySignals.tempC}
                       sfSymbol={citySignals.weatherSfSymbol}
+                      onPress={handleSwapCity}
                     />
                   </Animated.View>
                   <Animated.View style={[topOverlayRightStyle, ...s("flex-row gap-2")]}>
@@ -603,20 +605,35 @@ function MapIconButton({
  *  Issue #120: emoji glyph replaced by a typed SF Symbol via expo-symbols
  *  so the pill renders a crisp vector icon instead of an OS-dependent emoji. */
 function MapWeatherPill({
-  tempC,
+  cityName,
   neighborhood,
+  tempC,
   sfSymbol,
   tintColor = "#356f95",
+  onPress,
 }: {
-  tempC: number;
+  /** Full city name shown prominently — e.g. "Berlin", "Zurich". */
+  cityName: string;
+  /** Short locality suffix — e.g. "Mitte", "HB". */
   neighborhood: string;
+  tempC: number;
   sfSymbol: SFSymbol;
   tintColor?: string;
+  /** Optional tap handler. When provided, the pill becomes a Pressable
+   *  with a tiny "arrow.2.squarepath" affordance to hint at the swap
+   *  action (city toggle on the live demo). */
+  onPress?: () => void;
 }) {
+  const Wrapper = onPress ? Pressable : View;
   return (
-    <View
-      style={[
-        ...s("rounded-full flex-row items-center gap-2 px-4"),
+    <Wrapper
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={
+        onPress ? `Swap city — currently ${cityName}` : undefined
+      }
+      onPress={onPress}
+      style={({ pressed }: { pressed?: boolean } = {}) => [
+        ...s("rounded-full flex-row items-center gap-2 pl-3 pr-4"),
         {
           backgroundColor: "rgba(255, 255, 255, 0.88)",
           borderWidth: 1,
@@ -626,20 +643,45 @@ function MapWeatherPill({
           shadowOpacity: 0.12,
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 4 },
+          opacity: pressed ? 0.7 : 1,
         },
       ]}
     >
       <SymbolView
         name={sfSymbol}
         tintColor={tintColor}
-        size={18}
+        size={20}
         weight="semibold"
-        style={{ width: 18, height: 18 }}
+        style={{ width: 20, height: 20 }}
       />
-      <Text style={[...s("text-sm font-bold text-ink"), { letterSpacing: -0.2 }]}>
-        {Math.round(tempC)}°C · {neighborhood}
-      </Text>
-    </View>
+      <View>
+        <Text
+          style={[
+            ...s("text-sm font-black text-ink"),
+            { letterSpacing: -0.3, lineHeight: 16 },
+          ]}
+        >
+          {cityName}
+        </Text>
+        <Text
+          style={[
+            ...s("text-[10px] font-semibold text-cocoa"),
+            { letterSpacing: 0.3, lineHeight: 12, marginTop: 1 },
+          ]}
+        >
+          {Math.round(tempC)}° · {neighborhood}
+        </Text>
+      </View>
+      {onPress ? (
+        <SymbolView
+          name="arrow.2.squarepath"
+          tintColor="rgba(23, 18, 15, 0.45)"
+          size={12}
+          weight="semibold"
+          style={{ width: 12, height: 12, marginLeft: 4 }}
+        />
+      ) : null}
+    </Wrapper>
   );
 }
 
