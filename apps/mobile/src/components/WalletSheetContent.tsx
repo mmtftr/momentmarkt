@@ -515,6 +515,7 @@ export function WalletSheetContent({
 // stay quiet visually so the chip row remains the user's anchor.
 // ---------------------------------------------------------------------
 function SwipeMode({
+  citySlug,
   variants,
   loading,
   stackKey,
@@ -524,6 +525,7 @@ function SwipeMode({
   onAllPassed,
   onExpand,
 }: {
+  citySlug: string;
   variants: AlternativeOffer[] | null;
   loading: boolean;
   stackKey: number;
@@ -537,7 +539,23 @@ function SwipeMode({
    *  mini-player → full-screen player pattern. */
   onExpand?: () => void;
 }): ReactElement {
-  const browseCount = variants?.length ?? 0;
+  // Real catalog count for the "Browse all N merchants →" link
+  // (issue #146 polish #2). Falls through to the variant pool size when
+  // the merchants endpoint hasn't responded yet — the user always sees
+  // a number, just possibly the curated count for the first frame.
+  const [catalogCount, setCatalogCount] = useState<number | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchMerchants(citySlug, undefined, 1, ctrl.signal).then((res) => {
+      if (ctrl.signal.aborted) return;
+      if (res && typeof res.count === "number") setCatalogCount(res.count);
+    });
+    return () => ctrl.abort();
+  }, [citySlug]);
+  const browseLabel =
+    catalogCount && catalogCount > 0
+      ? `Browse all ${catalogCount} merchants`
+      : "Browse all merchants";
   const canExpand = !!onExpand && variants !== null && variants.length > 0;
   return (
     <View>
@@ -601,44 +619,35 @@ function SwipeMode({
         <SwipeEmptyState lens={lens} />
       )}
 
-      {/* Browse-all toggle. Always rendered so the user has a visible
-          escape from the curated stack to the unfiltered list (per
-          DESIGN_PRINCIPLES.md #1: the list is reality). The count comes
-          from the active lens's variant pool — a quick "this many got
-          curated"; the list view shows the full catalog. */}
+      {/* Browse-all link. Demoted from the previous fat full-width pill
+          to a small centered text+chevron link (issue #146 polish #2)
+          so it reads as a *link* under the stack rather than a CTA
+          competing with the card itself. The list is still reality
+          (DESIGN_PRINCIPLES.md #1) — just visually quieter. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Browse all merchants in list view"
         onPress={onEnterListMode}
+        hitSlop={12}
         style={({ pressed }) => [
-          ...s("mt-4 rounded-2xl bg-white px-4 py-3 flex-row items-center justify-between"),
-          {
-            borderWidth: 1,
-            borderColor: "rgba(23, 18, 15, 0.06)",
-            opacity: pressed ? 0.85 : 1,
-          },
+          ...s("flex-row items-center justify-center"),
+          { marginTop: 18, opacity: pressed ? 0.6 : 1 },
         ]}
       >
-        <View style={s("flex-row items-center")}>
-          <SymbolView
-            name="list.bullet"
-            tintColor="#6f3f2c"
-            size={14}
-            weight="semibold"
-            style={{ width: 16, height: 16, marginRight: 8 }}
-          />
-          <Text style={s("text-sm font-semibold text-ink")}>
-            {browseCount > 0
-              ? `Browse all merchants (${browseCount}+)`
-              : "Browse all merchants"}
-          </Text>
-        </View>
+        <Text
+          style={[
+            ...s("text-cocoa"),
+            { fontSize: 14, fontWeight: "600" },
+          ]}
+        >
+          {browseLabel}
+        </Text>
         <SymbolView
           name="chevron.right"
-          tintColor="rgba(23, 18, 15, 0.45)"
+          tintColor="#6f3f2c"
           size={12}
           weight="semibold"
-          style={{ width: 12, height: 12 }}
+          style={{ width: 12, height: 12, marginLeft: 4 }}
         />
       </Pressable>
     </View>

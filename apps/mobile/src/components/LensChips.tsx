@@ -138,7 +138,9 @@ function LensChip({
         style={[
           {
             fontSize: 13,
-            fontWeight: "700",
+            // Bump weight on the active chip so its label punches harder
+            // against the spark background (issue #146 polish #5).
+            fontWeight: active ? "800" : "700",
             letterSpacing: 0.2,
             color: active ? "#ffffff" : "#17120f",
           },
