@@ -389,35 +389,32 @@ export default function App() {
     setViewMode("discover");
   }, []);
 
-  // Issue #156 phase 4 — fired by DiscoverView (and the merchant-tap
-  // handler) whenever a fresh variants[] is resolved. Records every
-  // is_special_surface=true variant_id in `seenSpecialIds` if the
-  // user is currently on Discover (they'll see it directly, no dot
-  // needed); arms the dot if they're on a non-Discover tab. The
-  // dedupe via seenSpecialIds means a re-fetch of the same special
-  // doesn't re-trigger the dot every time.
+  // Issue #156 phase 4 / #175 — fired by DiscoverView whenever a fresh
+  // variants[] result resolves. Adds newly discovered special cards to
+  // the counted Discover badge once per variant_id. Opening Discover no
+  // longer clears the badge; only swiping the actual card does.
   const handleVariantsResolved = useCallback(
     (resolvedVariants: AlternativeOffer[]) => {
       const specials = resolvedVariants.filter((v) => v.is_special_surface);
       if (specials.length === 0) return;
-      const seen = seenSpecialIds.current;
-      const fresh = specials.filter((v) => !seen.has(v.variant_id));
+      const everSeen = everSeenSpecialIds.current;
+      const unseen = unseenSpecialIds.current;
+      const fresh = specials.filter((v) => !everSeen.has(v.variant_id));
       if (fresh.length === 0) return;
-      if (viewMode === "discover") {
-        // User is already on Discover — they're seeing the special directly,
-        // record it as seen so a follow-up fetch doesn't arm the dot.
-        for (const v of fresh) seen.add(v.variant_id);
-        return;
+      for (const v of fresh) {
+        everSeen.add(v.variant_id);
+        unseen.add(v.variant_id);
       }
-      // Non-Discover tab: arm the dot AND record the ids so the next
-      // re-fetch doesn't keep re-triggering. Recording-on-arm matches
-      // the spec — the user "sees" the dot from the moment we set it,
-      // even though they haven't opened Discover yet.
-      for (const v of fresh) seen.add(v.variant_id);
-      setHasUnseenSpecial(true);
+      setUnseenSpecialCount(unseen.size);
     },
-    [viewMode],
+    [],
   );
+
+  const markSpecialSeen = useCallback((variantId: string) => {
+    const unseen = unseenSpecialIds.current;
+    if (!unseen.delete(variantId)) return;
+    setUnseenSpecialCount(unseen.size);
+  }, []);
 
   // Issue #137 — DiscoverView appends fresh PriorSwipe entries here
   // so App.tsx remains the single source of truth for accumulated
@@ -604,15 +601,6 @@ export default function App() {
   const handleGoToDiscover = useCallback(() => {
     setViewMode("discover");
   }, []);
-
-  // Issue #156 phase 4 — clear the unread-special dot whenever the
-  // user actually opens Discover. The dedupe set already retains the
-  // variant_ids that armed the dot, so a re-fetch returning the same
-  // specials won't re-trigger the badge.
-  useEffect(() => {
-    if (viewMode !== "discover") return;
-    setHasUnseenSpecial(false);
-  }, [viewMode]);
 
   const walletArea = (
     <View style={s("flex-1")}>
@@ -810,6 +798,7 @@ export default function App() {
       onAppendSwipeHistory={handleAppendSwipeHistory}
       onSavePass={handleSavePass}
       onVariantsResolved={handleVariantsResolved}
+      onCardConsumed={markSpecialSeen}
     />
   );
 
@@ -900,7 +889,7 @@ export default function App() {
               <BottomNavBar
                 activeView={viewMode}
                 onViewChange={handleViewChange}
-                discoverBadgeCount={hasUnseenSpecial ? 1 : 0}
+                discoverBadgeCount={unseenSpecialCount}
               />
             ) : null}
           </View>
