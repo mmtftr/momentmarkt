@@ -23,7 +23,7 @@
  */
 
 import { SymbolView } from "expo-symbols";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -32,6 +32,13 @@ import {
   Text,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { lightTap, mediumTap } from "../lib/haptics";
@@ -133,10 +140,9 @@ export function WalletView({
               key={pass.id}
               style={{ marginBottom: idx === passes.length - 1 ? 0 : 12 }}
             >
-              <SavedPassCard
-                pass={pass}
-                onTap={() => onPassTap(pass)}
-                onLongPress={() => {
+              <SwipeToDeleteRow
+                onDelete={() => onRemovePass(pass.id)}
+                onLongPressFallback={() => {
                   mediumTap();
                   Alert.alert(
                     "Remove this saved offer?",
@@ -151,6 +157,8 @@ export function WalletView({
                     ],
                   );
                 }}
+                onTap={() => onPassTap(pass)}
+                pass={pass}
               />
             </View>
           ))}
@@ -225,6 +233,174 @@ function WalletEmptyState({
 }
 
 /**
+ * Reveal threshold in points beyond which a release commits to the
+ * fully-revealed state (showing the Delete button). Anything less
+ * springs back to 0.
+ */
+const REVEAL_THRESHOLD_X = -40;
+/** Velocity threshold (px/s) for a confident left-flick to also commit
+ *  the reveal even if the user didn't drag past REVEAL_THRESHOLD_X. */
+const REVEAL_THRESHOLD_VX = -800;
+/** Width of the Delete button slot (also the max leftward travel). */
+const DELETE_REVEAL_WIDTH = 80;
+/** Height the Delete button + row should match. ~120pt matches the
+ *  SavedPassCard layout (96 photo + 12 padding top + 12 bottom).
+ *  Hard-coded so the absolute-positioned Delete button doesn't have to
+ *  measure the row at runtime. */
+const ROW_HEIGHT = 120;
+/** iOS-Mail-style spring tuning — confident snap, no overshoot. */
+const REVEAL_SPRING = { stiffness: 140, damping: 18 } as const;
+
+/**
+ * iOS-Mail-style swipe-LEFT-to-reveal-Delete container (#170 fix 3).
+ *
+ * Wraps each SavedPassCard with a Reanimated translateX SV. A Pan
+ * gesture (left-only via activeOffsetX) drags the row left, clamped to
+ * [-DELETE_REVEAL_WIDTH, 0]. On release:
+ *   • translationX < REVEAL_THRESHOLD_X || velocityX < REVEAL_THRESHOLD_VX
+ *     → spring to fully-revealed (-DELETE_REVEAL_WIDTH)
+ *   • else → spring back to 0 (closed)
+ *
+ * Tapping anywhere on the row resets translateX to 0 first, then fires
+ * the row's normal onPress (so a partially-revealed row dismisses the
+ * Delete button on tap rather than firing the redeem flow with a
+ * confusing offset). This matches iOS Mail's "tap-elsewhere-dismisses"
+ * behavior.
+ *
+ * The long-press-to-confirm path is preserved as a backup deletion
+ * affordance so the discoverability of the gesture isn't a hard
+ * blocker for power users who don't try the swipe yet.
+ *
+ * activeOffsetX([-12, 9999]) only activates on leftward pans ≥12pt;
+ * failOffsetY([-15, 15]) cancels the pan if the user moves vertically
+ * by more than 15pt — that yields the gesture back to the ScrollView so
+ * vertical scroll still works. tap-on-revealed slides closed.
+ */
+function SwipeToDeleteRow({
+  pass,
+  onTap,
+  onDelete,
+  onLongPressFallback,
+}: {
+  pass: SavedPass;
+  onTap: () => void;
+  onDelete: () => void;
+  onLongPressFallback: () => void;
+}): ReactElement {
+  const translateX = useSharedValue(0);
+
+  const close = useCallback(() => {
+    translateX.value = withSpring(0, REVEAL_SPRING);
+  }, [translateX]);
+
+  const handleDeletePress = useCallback(() => {
+    mediumTap();
+    onDelete();
+    // After the parent removes the pass the row will unmount; resetting
+    // translateX defends against a remount-with-the-same-key edge case.
+    translateX.value = 0;
+  }, [onDelete, translateX]);
+
+  // Tap-anywhere-on-row dismisses the reveal first, then defers to the
+  // regular tap. We branch in JS via a small handler that reads the
+  // current SV value (cheap on the JS thread because it's a single
+  // .value access — no worklet round-trip).
+  const handleRowTap = useCallback(() => {
+    if (translateX.value < -1) {
+      close();
+      return;
+    }
+    onTap();
+  }, [close, onTap, translateX]);
+
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-12, 9999])
+        .failOffsetY([-15, 15])
+        .onChange((e) => {
+          // Clamp to [-DELETE_REVEAL_WIDTH, 0] so the row can't drift
+          // off-screen and can't drag rightward (the Delete UI lives
+          // on the right).
+          translateX.value = Math.max(-DELETE_REVEAL_WIDTH, Math.min(0, e.translationX));
+        })
+        .onEnd((e) => {
+          const reveal =
+            e.translationX < REVEAL_THRESHOLD_X ||
+            e.velocityX < REVEAL_THRESHOLD_VX;
+          if (reveal) {
+            translateX.value = withSpring(-DELETE_REVEAL_WIDTH, {
+              ...REVEAL_SPRING,
+              velocity: e.velocityX,
+            });
+            runOnJS(lightTap)();
+          } else {
+            translateX.value = withSpring(0, REVEAL_SPRING);
+          }
+        }),
+    [translateX],
+  );
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <View style={{ position: "relative", height: ROW_HEIGHT }}>
+      {/* Delete button — sits BENEATH the row, revealed as the row
+          slides left. Tapping it removes the pass via onDelete. The
+          button is rendered first so the row above it covers it at
+          rest (translateX = 0) and uncovers it as the row slides. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${pass.variant.merchant_display_name}`}
+        onPress={handleDeletePress}
+        style={({ pressed }) => ({
+          position: "absolute",
+          right: 0,
+          top: 0,
+          width: DELETE_REVEAL_WIDTH,
+          height: ROW_HEIGHT,
+          backgroundColor: "#dc2626",
+          borderRadius: 16,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: pressed ? 0.8 : 1,
+        })}
+      >
+        <SymbolView
+          name="trash.fill"
+          tintColor="#ffffff"
+          size={22}
+          weight="medium"
+          style={{ width: 22, height: 22, marginBottom: 4 }}
+        />
+        <Text
+          style={{
+            color: "#ffffff",
+            fontSize: 12,
+            fontWeight: "800",
+            letterSpacing: 0.5,
+          }}
+        >
+          Delete
+        </Text>
+      </Pressable>
+
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[{ height: ROW_HEIGHT }, rowStyle]}>
+          <SavedPassCard
+            pass={pass}
+            onTap={handleRowTap}
+            onLongPress={onLongPressFallback}
+          />
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+}
+
+/**
  * Single saved-pass row.
  *
  * Layout (~120pt tall):
@@ -263,6 +439,7 @@ function SavedPassCard({
       style={({ pressed }) => [
         ...s("flex-row rounded-2xl bg-white"),
         {
+          height: ROW_HEIGHT,
           padding: 12,
           borderWidth: 1,
           borderColor: "rgba(23, 18, 15, 0.08)",
