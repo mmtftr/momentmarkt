@@ -253,7 +253,7 @@ function MerchantMarker({
         <HighlightedMerchantMarker icon={icon} />
       ) : (
         <View style={markerStyles.bubbleWrap}>
-          <View style={markerStyles.normal}>
+          <View style={[markerStyles.normal, hasOffer ? markerStyles.normalWithOffer : null]}>
             {/* SF Symbol glyph rendered in cocoa/rain/spark tint so the
                 pin reads as a native Apple Maps category chip. */}
             <SymbolView
@@ -263,6 +263,7 @@ function MerchantMarker({
               weight="semibold"
               style={markerStyles.normalSymbol}
             />
+            {hasOffer ? <OfferBadge /> : null}
           </View>
         </View>
       )}
@@ -277,6 +278,20 @@ function MerchantMarker({
         </Callout>
       ) : null}
     </Marker>
+  );
+}
+
+function OfferBadge(): JSX.Element {
+  return (
+    <View style={markerStyles.offerBadge}>
+      <SymbolView
+        name="tag.fill"
+        tintColor="#ffffff"
+        size={9}
+        weight="bold"
+        style={markerStyles.offerBadgeSymbol}
+      />
+    </View>
   );
 }
 
@@ -410,9 +425,32 @@ const markerStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1.5 },
     elevation: 2,
   },
+  normalWithOffer: {
+    borderWidth: 1.5,
+    borderColor: SPARK_RED,
+    shadowOpacity: 0.24,
+    shadowRadius: 4,
+  },
   normalSymbol: {
     width: 18,
     height: 18,
+  },
+  offerBadge: {
+    position: "absolute",
+    right: -4,
+    bottom: -3,
+    width: 17,
+    height: 17,
+    borderRadius: 8.5,
+    backgroundColor: SPARK_RED,
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  offerBadgeSymbol: {
+    width: 10,
+    height: 10,
   },
   highlightedWrap: {
     alignItems: "center",
