@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/logo-icon.svg" alt="MomentMarkt" width="120" />
+<img src="./assets/logo-icon.png" alt="MomentMarkt" width="120" />
 
 # MomentMarkt
 
@@ -151,6 +151,29 @@ Tavily, no Foursquare, no CH GTFS bind on the Zürich swap.
   fragment, monospace dev-panel chip top-right, neutral palette, no
   Sparkassen branding)
 - **GitHub repo**: https://github.com/mmtftr/momentmarkt (this repo)
+
+## How we built it
+
+MomentMarkt was planned and built using a multi-agent Claude Code orchestration pipeline — the same agentic approach the product itself demonstrates. A coordinator agent dispatched specialised subagents across five stages, each writing to a single artifact in `work/` that the next stage picked up. No agent wrote into another agent's context; no coordinator did agent work itself.
+
+```mermaid
+flowchart LR
+  EXPLORE["stage 00: EXPLORE\nideator → explorer\n(loop until budget or empty queue)"]
+  PLAN["stage 01: PLAN\nplanner\nwrites SPEC.md"]
+  CRIT["stage 02: CRITIQUE + REFINE\ncritic writes CRITIQUE.md"]
+  REFINE["planner refines SPEC.md"]
+  JUDGE["stage 03: JUDGE\njudge → YES / NO"]
+
+  EXPLORE --> PLAN
+  PLAN --> CRIT
+  CRIT -. "EXPLORATION_REQUEST.md\n(or loop again)" .-> EXPLORE
+  CRIT --> REFINE
+  REFINE --> JUDGE
+```
+
+The invariant that made this work: every role file starts with `OUTPUT:` naming the single file that role writes. Agents never leak into the coordinator's context — only their artifact does. Relaxing this causes context pollution; we didn't relax it.
+
+Canonical output artifacts: `work/SPEC.md` (spec-v04, the build authority), `context/AGENT_IO.md` (agent contract), `context/PARTNER_DISCUSSION.md` (verbal sync transcribed to actionable change requests), `assets/architecture-diagrams.md` (Mermaid diagrams auto-rendering on GitHub).
 
 ## Run The Backend
 
