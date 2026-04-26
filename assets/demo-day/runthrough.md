@@ -76,8 +76,8 @@ silent-vs-fire delta).
 
 **VISUAL:** Press the DevPanel **"Run Surfacing Agent"** button (this calls
 `onRunSurfacing()` → sets step to `surfacing`). The `SurfaceNotification`
-slides up over the LockScreen with title "Es regnet bald" and body "80 m bis
-zum heißen Kakao bei Café Bondi. 15% cashback." Emoji ☔.
+slides up over the LockScreen with the headline "Rain in 12 min. 80 m to hot
+cocoa." pointed at Cafe Bondi. Emoji ☔.
 **Say:** "One in-app surface — the only one she'll see this hour. The
 surfacing input crosses the boundary as an intent token plus a coarse H3 cell."
 **Do:** Move the mouse over the DevPanel privacy chip area showing

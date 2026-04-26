@@ -13,74 +13,50 @@ Subtitle: *Two agents. Three triggers. One quiet wallet.*
 
 ## Canvas layout (16:9)
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  TOP-LEFT: title block                       TOP-RIGHT: privacy chip         │
-│                                                                              │
-│  CENTER: main flow (left → right)                                            │
-│   [Signals] → [Opportunity Agent] → [Merchant Inbox] → [Surfacing Agent]     │
-│                                                              ↓               │
-│                                                       [RN wallet + redeem]   │
-│                                                                              │
-│  BOTTOM: three production-swap callouts arranged horizontally                │
-│   (a) Surface path     (b) SLM extractor      (c) Payone signal              │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph TOP["TOP"]
+    direction LR
+    TITLE["TOP-LEFT: title block"]
+    CHIP["TOP-RIGHT: privacy chip"]
+  end
+
+  subgraph CENTER["CENTER: main flow"]
+    direction LR
+    S["Signals"] --> OA["Opportunity Agent"] --> MI["Merchant Inbox"] --> SA["Surfacing Agent"] --> WAL["RN wallet + redeem"]
+  end
+
+  subgraph BOTTOM["BOTTOM: three production-swap callouts (horizontal)"]
+    direction LR
+    A["(a) Surface path"]
+    B["(b) SLM extractor"]
+    C["(c) Payone signal"]
+  end
+
+  TOP --> CENTER --> BOTTOM
 ```
 
 ## Main flow (top half of slide)
 
-```text
-   ┌───────────────────────────────────────┐
-   │ SIGNALS (real today)                  │
-   │  • Open-Meteo (Berlin Mitte)          │
-   │  • OSM POIs — 937 Berlin / 2096 ZRH   │
-   │  • VBB GTFS stops (walk-time copy)    │
-   │  • Events stub (event-end trigger)    │
-   │  • data/transactions/                 │
-   │      berlin-density.json (4 merchants)│  ← demand-gap source
-   └──────────────────┬────────────────────┘
-                      │
-                      ▼
-   ┌───────────────────────────────────────┐
-   │ OPPORTUNITY AGENT                     │  «periodic job»
-   │ (LLM-once-per-draft, cheap model)     │  prod: Helm chart /
-   │                                       │  scheduled worker
-   │  Triggers (deterministic Python):     │
-   │    weather  ▸  event-end  ▸  demand   │
-   │  Output per merchant per fire:        │
-   │    { offer, widget_spec(JSON) }       │
-   └──────────────────┬────────────────────┘
-                      │
-                      ▼
-   ┌───────────────────────────────────────┐
-   │ MERCHANT INBOX (web, Vite + React)    │
-   │  • Approve / Edit / Skip              │
-   │  • "Always auto-approve like this"    │
-   │  • Per-merchant demand-curve view     │
-   │    (typical-vs-live, gap highlighted) │
-   └──────────────────┬────────────────────┘
-                      │  approved + auto_approved
-                      ▼
-   ┌───────────────────────────────────────┐    ┌───────────────────────────┐
-   │ SURFACING AGENT                       │ ◀──│ HIGH-INTENT BOOST         │
-   │ (deterministic scoring, NO LLM here)  │    │  • active screen time     │
-   │                                       │    │  • map-app foreground     │
-   │  walk-ring = user.h3 + 1 ring (~1km)  │    │  • coupon-browse recent   │
-   │  silence threshold (default behavior) │    │ → lowers threshold        │
-   │  pick top-1                           │    │ → unlocks aggressive copy │
-   │  on fire: LLM rewrites HEADLINE only  │    └───────────────────────────┘
-   │  cache: (offer_id, weather, intent)   │
-   └──────────────────┬────────────────────┘
-                      │
-                      ▼
-   ┌───────────────────────────────────────┐
-   │ RN WALLET (Expo, iOS Simulator)       │
-   │  in-app card → GenUI widget           │
-   │  6 RN primitives + JSON layout spec   │
-   │  schema-validated, fallback render    │
-   │  → QR token → simulated girocard      │
-   │    cashback, budget decrement         │
-   └───────────────────────────────────────┘
+```mermaid
+flowchart TD
+  SIG["SIGNALS (real today)<br/>- Open-Meteo (Berlin Mitte)<br/>- OSM POIs (937 Berlin / 2096 ZRH)<br/>- VBB GTFS stops (walk-time copy)<br/>- Events stub (event-end trigger)<br/>- data/transactions/berlin-density.json (4 merchants, demand-gap source)"]
+
+  OPP["OPPORTUNITY AGENT (periodic job)<br/>LLM-once-per-draft, cheap model<br/>prod: Helm chart / scheduled worker<br/>Triggers (deterministic Python): weather / event-end / demand<br/>Output per merchant per fire: offer + widget_spec(JSON)"]
+
+  INBOX["MERCHANT INBOX (web, Vite + React)<br/>- Approve / Edit / Skip<br/>- Always auto-approve like this<br/>- Per-merchant demand-curve view (typical-vs-live, gap highlighted)"]
+
+  SURF["SURFACING AGENT (deterministic scoring, NO LLM here)<br/>walk-ring = user.h3 + 1 ring (~1km)<br/>silence threshold (default behavior)<br/>pick top-1<br/>on fire: LLM rewrites HEADLINE only<br/>cache: (offer_id, weather, intent)"]
+
+  HI["HIGH-INTENT BOOST<br/>- active screen time<br/>- map-app foreground<br/>- coupon-browse recent<br/>lowers threshold, unlocks aggressive copy"]
+
+  WALL["RN WALLET (Expo, iOS Simulator)<br/>in-app card -> GenUI widget<br/>6 RN primitives + JSON layout spec<br/>schema-validated, fallback render<br/>QR token -> simulated girocard cashback, budget decrement"]
+
+  SIG --> OPP
+  OPP --> INBOX
+  INBOX -- "approved + auto_approved" --> SURF
+  HI --> SURF
+  SURF --> WALL
 ```
 
 ## Two-agent split annotation (callout block beside the agents)
@@ -123,36 +99,29 @@ the whole pitch beat.
 
 ### (a) Surface path
 
-```
-┌──────────────────────────────┐        ┌────────────────────────────────────┐
-│ DEMO                         │   ─▶   │ PRODUCTION                         │
-│ in-app card slides into the  │        │ Opportunity Agent → push           │
-│ RN wallet on trigger fire    │        │ notification server                │
-│ (no OS permission flow)      │        │ (Expo Push / FCM / APNs) → device  │
-└──────────────────────────────┘        └────────────────────────────────────┘
+```mermaid
+flowchart LR
+  DA["DEMO<br/>in-app card slides into the RN wallet on trigger fire<br/>(no OS permission flow)"]
+  PA["PRODUCTION<br/>Opportunity Agent -> push notification server<br/>(Expo Push / FCM / APNs) -> device"]
+  DA ==> PA
 ```
 
 ### (b) SLM extractor (intent token)
 
-```
-┌──────────────────────────────┐        ┌────────────────────────────────────┐
-│ DEMO                         │   ─▶   │ PRODUCTION                         │
-│ extract_intent_token() stub  │        │ on-device SLM (Phi-3-mini /        │
-│ returns hand-coded enum on   │        │ Gemma-2B) emits intent token;      │
-│ the server                   │        │ only the wrapper leaves the device │
-└──────────────────────────────┘        └────────────────────────────────────┘
+```mermaid
+flowchart LR
+  DB["DEMO<br/>extract_intent_token() stub<br/>returns hand-coded enum on the server"]
+  PB["PRODUCTION<br/>on-device SLM (Phi-3-mini / Gemma-2B) emits intent token;<br/>only the wrapper leaves the device"]
+  DB ==> PB
 ```
 
 ### (c) Payone signal (demand)
 
-```
-┌──────────────────────────────┐        ┌────────────────────────────────────┐
-│ DEMO                         │   ─▶   │ PRODUCTION                         │
-│ data/transactions/           │        │ real cross-Sparkassen Payone       │
-│ berlin-density.json          │        │ aggregation — transaction velocity │
-│ (4 merchants, hand-authored) │        │ already flowing for any merchant   │
-│                              │        │ on a Sparkassen terminal           │
-└──────────────────────────────┘        └────────────────────────────────────┘
+```mermaid
+flowchart LR
+  DC["DEMO<br/>data/transactions/berlin-density.json<br/>(4 merchants, hand-authored)"]
+  PC["PRODUCTION<br/>real cross-Sparkassen Payone aggregation<br/>transaction velocity already flowing for any merchant on a Sparkassen terminal"]
+  DC ==> PC
 ```
 
 ## Aggregate-intelligence callout (bottom-right corner, 10-second pitch beat)
