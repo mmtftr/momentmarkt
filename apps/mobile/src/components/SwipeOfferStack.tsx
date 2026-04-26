@@ -838,46 +838,9 @@ function SwipeCard({
             surfaceMinHeight={surfaceMinHeight}
           />
         )}
-        {/* Issue #156 — "⚡ JUST FOR YOU" badge on the top card when the
-            backend flagged this variant as the fresh special surface.
-            Sits in the photo's TOP-LEFT corner, opposite the discount
-            pill in the TOP-RIGHT, so the two pills frame the photo
-            without competing for the same anchor. Only renders on the
-            top-of-stack interactive card; peek cards never paint it
-            (the visual reward should land on what the user is acting on,
-            not on stale cards behind it). */}
-        {variant.is_special_surface ? (
-          <View
-            pointerEvents="none"
-            style={[
-              {
-                position: "absolute",
-                top: 14,
-                left: 14,
-                zIndex: 6,
-                backgroundColor: "rgba(242, 84, 45, 0.95)",
-                borderRadius: 999,
-                paddingHorizontal: 10,
-                height: 28,
-                alignItems: "center",
-                justifyContent: "center",
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: "#ffffff",
-                fontSize: 10,
-                fontWeight: "900",
-                letterSpacing: 2,
-                textTransform: "uppercase",
-                lineHeight: 12,
-              }}
-            >
-              ⚡ Just for you
-            </Text>
-          </View>
-        ) : null}
+        {/* `is_special_surface` still feeds the Discover badge count, but
+            the in-card "Just for you" pill was redundant with the active
+            lens chip and cluttered the photo. */}
         {/* Accept / skip overlays — Tinder-style stamps centered on the
             card. Wrappers fill the entire card surface and center their
             stamp child so the label appears at true vertical+horizontal

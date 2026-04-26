@@ -1,6 +1,7 @@
 import { SymbolView } from "expo-symbols";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import type { SFSymbol } from "sf-symbols-typescript";
 
 import { fetchMerchants, type MerchantListItem } from "../lib/api";
 import { categoryToIcon } from "../lib/categoryIcon";
@@ -25,6 +26,20 @@ type Props = {
   onSearchFocus?: () => void;
 };
 
+type BrowseFilter = "all" | "offers" | "nearby";
+
+const BROWSE_FILTERS: readonly {
+  key: BrowseFilter;
+  label: string;
+  sfSymbol: SFSymbol;
+}[] = [
+  { key: "all", label: "All", sfSymbol: "line.3.horizontal.decrease.circle" },
+  { key: "offers", label: "With offers", sfSymbol: "tag.fill" },
+  { key: "nearby", label: "Under 250 m", sfSymbol: "location.fill" },
+] as const;
+
+const NEARBY_FILTER_M = 250;
+
 /**
  * Search bar + "Offers for you" merchant list rendered inside the wallet
  * drawer (issue #116). Live-filters the `/merchants/{city}` endpoint with
@@ -46,6 +61,7 @@ export function MerchantSearchList({
   const [merchants, setMerchants] = useState<MerchantListItem[]>(() =>
     OFFLINE_FALLBACK_MERCHANTS,
   );
+  const [filter, setFilter] = useState<BrowseFilter>("all");
   const [loading, setLoading] = useState(false);
   // Tracks whether the *active* result set is the offline fallback. We
   // suppress the "no merchants match" empty state in that case because
@@ -97,10 +113,14 @@ export function MerchantSearchList({
   }, [city, debounced]);
 
   const headerLabel = debounced ? "Search results" : "Offers for you";
+  const visibleMerchants = useMemo(
+    () => filterMerchants(merchants, filter),
+    [merchants, filter],
+  );
   const showEmptyState =
-    !loading && merchants.length === 0 && !!debounced && !usingFallback;
+    !loading && visibleMerchants.length === 0 && (!!debounced || filter !== "all") && !usingFallback;
   const showFallbackEmpty =
-    !loading && usingFallback && merchants.length === 0 && !!debounced;
+    !loading && usingFallback && visibleMerchants.length === 0 && (!!debounced || filter !== "all");
 
   return (
     <View style={s("mt-4")}>
@@ -139,6 +159,8 @@ export function MerchantSearchList({
         />
       </View>
 
+      <FilterChips active={filter} onChange={setFilter} />
+
       {/* Section header */}
       <View style={s("mt-4 mb-2 flex-row items-center justify-between")}>
         <Text
@@ -168,12 +190,12 @@ export function MerchantSearchList({
             ]}
           >
             <Text style={s("text-sm text-neutral-600 text-center")}>
-              No merchants match “{debounced}”
+              {emptyStateCopy(debounced, filter)}
             </Text>
           </View>
         ) : (
           <View style={s("gap-2")}>
-            {merchants.map((m) => (
+            {visibleMerchants.map((m) => (
               <MerchantCard
                 key={m.id}
                 merchant={m}
@@ -191,6 +213,65 @@ export function MerchantSearchList({
           </View>
         )}
       </View>
+    </View>
+  );
+}
+
+function FilterChips({
+  active,
+  onChange,
+}: {
+  active: BrowseFilter;
+  onChange: (filter: BrowseFilter) => void;
+}) {
+  return (
+    <View style={[...s("mt-3 flex-row"), { gap: 8 }]}>
+      {BROWSE_FILTERS.map((filter) => {
+        const selected = filter.key === active;
+        return (
+          <Pressable
+            key={filter.key}
+            accessibilityRole="button"
+            accessibilityLabel={`Filter merchants: ${filter.label}`}
+            accessibilityState={{ selected }}
+            onPress={() => {
+              if (!selected) {
+                lightTap();
+                onChange(filter.key);
+              }
+            }}
+            style={({ pressed }) => [
+              ...s("rounded-full flex-row items-center"),
+              {
+                paddingHorizontal: 11,
+                height: 34,
+                backgroundColor: selected ? "#17120f" : "#ffffff",
+                borderWidth: 1,
+                borderColor: selected ? "#17120f" : "rgba(23, 18, 15, 0.08)",
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+          >
+            <SymbolView
+              name={filter.sfSymbol}
+              tintColor={selected ? "#fff8ee" : "#6f3f2c"}
+              size={13}
+              weight="semibold"
+              style={{ width: 14, height: 14, marginRight: 6 }}
+            />
+            <Text
+              style={{
+                color: selected ? "#fff8ee" : "#17120f",
+                fontSize: 12,
+                fontWeight: selected ? "800" : "700",
+                letterSpacing: 0.1,
+              }}
+            >
+              {filter.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -296,6 +377,22 @@ function formatCategory(c: string): string {
   // Replace underscores ("ice_cream" → "ice cream") and capitalise.
   const clean = c.replace(/_/g, " ");
   return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+function filterMerchants(
+  merchants: MerchantListItem[],
+  filter: BrowseFilter,
+): MerchantListItem[] {
+  if (filter === "offers") return merchants.filter((m) => m.active_offer != null);
+  if (filter === "nearby") return merchants.filter((m) => m.distance_m <= NEARBY_FILTER_M);
+  return merchants;
+}
+
+function emptyStateCopy(query: string, filter: BrowseFilter): string {
+  if (query) return `No merchants match “${query}”`;
+  if (filter === "offers") return "No active offers in this list right now";
+  if (filter === "nearby") return "No merchants within 250 m right now";
+  return "No merchants to show right now";
 }
 
 function filterFallback(list: MerchantListItem[], q: string): MerchantListItem[] {

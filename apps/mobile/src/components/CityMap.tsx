@@ -211,7 +211,7 @@ export function CityMap({
  * preserved from #31 so they read as the wallet's hero suggestion.
  *
  * Pattern aligns with Apple Maps + Yelp-style category chips: small
- * round bubbles + emoji are immediately scannable on top of street
+ * round bubbles + SF Symbols are immediately scannable on top of street
  * tiles, while the halo + color shift directs the eye to the offer.
  */
 function MerchantMarker({

@@ -588,10 +588,8 @@ export type AlternativeOffer = {
   widget_spec: unknown;
   /**
    * Issue #156 — true on the first variant of every fresh fetch (anchor on
-   * the merchant-tap path, top-of-pool on the lens paths). Drives:
-   *   • the "⚡ JUST FOR YOU" pill in the top-LEFT of the top swipe card
-   *   • the red notification dot on the Discover tab in BottomNavBar
-   *     (when the user isn't already on Discover when the fetch lands).
+   * the merchant-tap path, top-of-pool on the lens paths). Drives the
+   * Discover tab badge count when fresh specials land.
    * Optional on the wire — defaults to false so old backends that don't
    * emit the field still parse cleanly.
    */

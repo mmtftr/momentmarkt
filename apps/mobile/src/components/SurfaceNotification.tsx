@@ -1,3 +1,4 @@
+import { SymbolView } from "expo-symbols";
 import type { JSX } from "react";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -8,6 +9,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import type { SFSymbol } from "sf-symbols-typescript";
 
 import { mediumTap } from "../lib/haptics";
 import { s } from "../styles";
@@ -17,7 +19,7 @@ type Props = {
   appName?: string;
   title: string;
   body: string;
-  emoji?: string;
+  sfSymbol?: SFSymbol;
   timeLabel?: string;
   onTap: () => void;
   onDismiss: () => void;
@@ -48,7 +50,7 @@ export function SurfaceNotification({
   appName = "MomentMarkt",
   title,
   body,
-  emoji = "☔",
+  sfSymbol = "cloud.rain.fill",
   timeLabel,
   onTap,
   onDismiss,
@@ -178,7 +180,13 @@ export function SurfaceNotification({
               {timeLabel}
             </Text>
           ) : null}
-          <Text style={s("text-base")}>{emoji}</Text>
+          <SymbolView
+            name={sfSymbol}
+            tintColor={TEXT_WHITE_80}
+            size={18}
+            weight="semibold"
+            style={{ width: 18, height: 18 }}
+          />
         </View>
       </Pressable>
     </Animated.View>
