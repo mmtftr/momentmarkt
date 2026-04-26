@@ -20,9 +20,6 @@ function findCafeBondi() {
 
 const merchant = findCafeBondi();
 
-const latestSample = merchant.live_samples.find((sample) =>
-  sample.time_local.includes("13:30:00"),
-);
 const approvalRule = merchant.autopilot_rule_hints;
 const cashbackPerRedeem = merchant.offer_budget.max_cashback_eur;
 const fallbackSurfaced = Math.round(merchant.demand_gap.gap_density_points * 0.4);
@@ -189,7 +186,7 @@ function App() {
       <section className="summary-grid" aria-label="Campaign summary">
         <Metric label="Surfaced" value={surfaced.toString()} detail="nearby high-intent wallets" />
         <Metric label="Accepted" value={accepted.toString()} detail="saved to wallet" />
-        <Metric label="Redeemed" value={redeemed.toString()} detail="simulated checkout" />
+        <Metric label="Redeemed" value={redeemed.toString()} detail="QR scanned at counter" />
         <Metric
           label="Budget left"
           value={euro(remainingBudget)}
@@ -222,12 +219,7 @@ function App() {
             <Evidence label="Demand gap" value={`${percent(merchant.demand_gap.gap_ratio)} below usual`} />
             <Evidence label="Distance" value={`${merchant.distance_m} m from Mia`} />
           </div>
-          <p className="agent-note">
-            Saturday 13:30 density is {merchant.demand_gap.live_density} vs. a
-            typical {merchant.demand_gap.typical_density}. Latest sample shows
-            {" "}{latestSample?.observed_transactions ?? "9"} transactions,
-            so the rule cleared the approval threshold without merchant review.
-          </p>
+          <MobileMoment />
           <Timeline />
         </article>
 
@@ -400,6 +392,28 @@ function Timeline() {
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+function MobileMoment() {
+  return (
+    <div className="mobile-moment" aria-label="What Mia sees on her phone">
+      <div className="mobile-moment-copy">
+        <span className="label">Mia's mobile moment</span>
+        <p>
+          The same draft becomes a single banner on Mia's phone: hot cocoa,
+          80 m away, expires before the rain stops.
+        </p>
+      </div>
+      <div className="mobile-moment-banner" aria-hidden>
+        <div className="mobile-moment-banner-meta">
+          <span>MomentMarkt</span>
+          <span>now</span>
+        </div>
+        <strong>Cafe Bondi · 80 m</strong>
+        <small>“Es regnet bald. 80 m bis zum heissen Kakao.” · {euro(cashbackPerRedeem)} cashback</small>
+      </div>
     </div>
   );
 }
