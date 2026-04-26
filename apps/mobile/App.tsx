@@ -4,6 +4,7 @@ import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { StatusBar } from "expo-status-bar";
 import {
   type ComponentProps,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -25,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CityMap } from "./src/components/CityMap";
 import { DevPanel, type DevPanelSignal } from "./src/components/DevPanel";
 import { MapTopChip } from "./src/components/MapTopChip";
+import { NativeTabBar, type NativeTabKey } from "./src/components/NativeTabBar";
 import { RedeemFlow } from "./src/components/RedeemFlow";
 import { WalletSheetContent } from "./src/components/WalletSheetContent";
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
@@ -54,24 +56,34 @@ import { scoreSurfacing, type SurfacingInput } from "./src/surfacing/surfacingSc
  *     snapToIndex(2) so the offer card is revealed without a separate
  *     notification banner. The sheet expansion IS the surface event — the
  *     old SurfaceNotification banner overlay is no longer rendered.
- *   - Bottom tab bar is pinned absolute below everything; sheet bottomInset
- *     keeps the drawer from sliding under it.
- *   - Wide viewports (≥820px logical width — landscape iPad / Mac sim window):
- *     DevPanel renders as a sidecar to the right; the map+sheet take the
- *     remaining width. Narrow phone portrait: DevPanel is a collapsible pill
- *     anchored to the very top so it doesn't fight the sheet.
+ *   - Bottom tab bar (issue #103) is now a real iOS UITabBarController via
+ *     <NativeTabBar /> (react-native-bottom-tabs). Each tab is a separate
+ *     scene; the TabView renders one at a time and the native bar persists
+ *     across switches with SF Symbol icons + native blur + haptics. The
+ *     standalone wrench DevPanelTrigger that used to live top-right is GONE
+ *     — Settings tab is the durable entry point for DevPanel content
+ *     (DevPanel is folded into Settings as the "Demo & Debug" section per
+ *     #80, and the contextual MapTopChip on the silent Home step still
+ *     opens the DevPanelOverlay during the demo).
+ *   - The canonical demo cut still runs entirely inside the Home tab's
+ *     bottom sheet (silent → surfacing → offer → redeeming → success). The
+ *     Offer / QR tabs are standalone consumer surfaces — useful for casual
+ *     browsing but NOT what drives the recorded cut.
+ *   - Wide viewports (≥820px logical width — landscape iPad / Mac sim
+ *     window): the wallet area + DevPanel sidecar render directly without
+ *     the NativeTabBar wrapper (the wide layout is dev-only, not the
+ *     demo-recording surface).
  */
 
 type DemoStep = "silent" | "surfacing" | "offer" | "redeeming" | "success";
 type WidgetVariant = keyof typeof demoWidgetSpecs;
 /** Top-level view selector. "demo" shows the wallet sheet + map + state
- *  machine; "history" pins the History screen above the wallet area;
- *  "settings" pins the Settings screen above the wallet area (issue #87 —
- *  Settings is now a 5th bottom-tab, no longer reachable via the removed
- *  gear icon in the sheet header). */
-type AppView = "demo" | "history" | "settings";
-/** What the bottom menu can request — a demo step, history, or settings. */
-type BottomMenuTarget = DemoStep | "history" | "settings";
+ *  machine (the canonical demo cut runs here); "offer" / "qr" / "history" /
+ *  "settings" each pin a full-screen consumer surface above the wallet
+ *  area. Issue #103 added "offer" + "qr" as their own top-level views (one
+ *  per native UITabBarController scene) so each tab has a stable
+ *  destination — see NativeTabBar wiring in App below. */
+type AppView = "demo" | "offer" | "qr" | "history" | "settings";
 
 const SIDE_BY_SIDE_BREAKPOINT = 820;
 const FALLBACK_CASHBACK_EUR = 1.85;
@@ -82,12 +94,15 @@ const FALLBACK_CASHBACK_EUR = 1.85;
 // offer step now relies on BottomSheetScrollView (issue #88) inside
 // WalletSheetContent for any minor overflow on small phones.
 const SHEET_SNAP_POINTS = ["25%", "55%", "80%"] as const;
-// Intrinsic content height of <BottomMenu /> *above* the home-indicator inset
-// (paddingTop 8 + item paddingVertical 12 + icon line 20 + marginTop 3 + label
-// line 12 ≈ 55 → round up to 56). The actual home-indicator padding is added
-// separately via insets.bottom so the sheet's bottomInset lands flush against
-// the *visible* tab bar top edge with no map-strip gap (issue #70 part A).
-const TAB_BAR_HEIGHT = 56;
+// Visible content height of the iOS UITabBarController bar (≈49pt above the
+// home-indicator inset on iPhone). Used as bottomInset on the BottomSheet
+// inside the Home scene so the lowest sheet snap (25%) lands flush against
+// the tab bar's top edge — the lib's TabView is translucent by default and
+// scenes extend behind the bar, so without this inset the sheet content
+// would slide under the tab labels. The home-indicator inset is added
+// separately via `insets.bottom`. Issue #103 swapped the inline JS
+// <BottomMenu /> for a real UITabBarController via react-native-bottom-tabs.
+const TAB_BAR_HEIGHT = 49;
 
 export default function App() {
   const [step, setStep] = useState<DemoStep>("silent");
@@ -194,36 +209,69 @@ export default function App() {
     setStep("silent");
   }, []);
 
-  const handleBottomMenu = useCallback((target: BottomMenuTarget) => {
-    if (target === "history") {
+  // Issue #103: translate the new NativeTabBar's tab keys into the
+  // top-level view selector. Each tab is a separate native scene
+  // (UITabBarController-managed); the Home tab owns the demo state machine
+  // (silent → surfacing → offer → redeeming → success) inside the bottom
+  // sheet, and the Offer / QR / History / Settings tabs are standalone
+  // consumer surfaces. We deliberately do NOT mutate the demo step from
+  // Offer / QR taps — the canonical cut still runs entirely inside the
+  // Home tab via MapTopChip → DevPanel → "Run surfacing" so the recorded
+  // demo beats stay reproducible regardless of which tab the user taps.
+  const handleChangeTab = useCallback((tab: NativeTabKey) => {
+    if (tab === "history") {
       setView("history");
       return;
     }
-    if (target === "settings") {
-      // Issue #87: Settings is now a real 5th bottom-tab. We toggle the
-      // top-level view AND open the SettingsScreen overlay so the existing
-      // visible-prop animation (slide-in from right) still plays. The
-      // bottom-menu highlight follows `view === 'settings'`.
+    if (tab === "settings") {
       setView("settings");
       setSettingsOpen(true);
       return;
     }
-    // Any demo-step tap returns us to the demo view (in case we were on
-    // History or Settings) and advances the underlying state machine. Demo
-    // presenter can keep the cut intact by simply not tapping during a beat.
-    setView("demo");
-    setStep(target);
+    if (tab === "offer") {
+      setView("offer");
+      return;
+    }
+    if (tab === "qr") {
+      setView("qr");
+      return;
+    }
+    // tab === "home" — return to the demo wallet surface. Reset step to
+    // silent only when coming back from a non-demo tab so a presenter
+    // tapping Home mid-flow doesn't blow away an in-progress beat.
+    setView((prev) => {
+      if (prev !== "demo") setStep("silent");
+      return "demo";
+    });
   }, []);
+
+  // Derive which native tab should appear active from the top-level view.
+  // The demo step inside the Home tab does NOT influence tab highlight —
+  // the canonical demo cut runs entirely inside the Home scene's bottom
+  // sheet, so the Home tab stays selected throughout silent → success.
+  const activeTab: NativeTabKey =
+    view === "history"
+      ? "history"
+      : view === "settings"
+        ? "settings"
+        : view === "offer"
+          ? "offer"
+          : view === "qr"
+            ? "qr"
+            : "home";
 
   const handleSheetChange = useCallback((index: number) => {
     setSheetIndex(index);
   }, []);
 
   const handleCloseSettings = useCallback(() => {
-    // Issue #87: closing the Settings overlay (X in the header) also returns
-    // the top-level view to "demo" so the wallet sheet + map regain focus.
+    // Issue #87 + #103: closing Settings (X in the header) returns to the
+    // Home tab. With NativeTabBar driving the bottom UI, switching `view`
+    // back to "demo" (and the demo step to silent) is what re-renders the
+    // home scene as the active tab — `activeTab` is derived from `view`.
     setSettingsOpen(false);
-    setView((prev) => (prev === "settings" ? "demo" : prev));
+    setView("demo");
+    setStep("silent");
   }, []);
   const handleOpenDevPanel = useCallback(() => {
     setDevPanelOpen(true);
@@ -316,22 +364,17 @@ export default function App() {
         />
       ) : null}
 
-      {/* Top-right DevPanel trigger (issue #70 part B). Replaces the old
-          horizontal collapsed strip with a compact 32×32 round button that
-          opens the full DevPanel as a slide-in overlay.
-          Issue #80: also gated on the silent step so the consumer view
-          (Offer/Redeem/Success/History) stays free of presenter affordances.
-          The same DevPanel content is also reachable from the gear icon →
-          Settings → "Demo & Debug" section, so no engineering surface is
-          lost — just contextually hidden. */}
-      {!sideBySide && step === "silent" && view === "demo" ? (
-        <DevPanelTrigger topInset={insets.top} onPress={handleOpenDevPanel} />
-      ) : null}
+      {/* Issue #103: the top-right wrench DevPanelTrigger has been removed.
+          Settings is now a real bottom tab (UITabBarController) and the
+          DevPanel is folded into the Settings tab as the "Demo & Debug"
+          section (#80). The MapTopChip above is still a contextual quick
+          path into the DevPanelOverlay during the silent Home beat. */}
 
-      {/* Bottom sheet wallet drawer. bottomInset matches the *real* tab-bar
-          height (intrinsic 56 + home-indicator inset) so the lowest snap
-          (25%) sits flush against the visible tab-bar top edge — no
-          map-strip gap (issue #70 part A). */}
+      {/* Bottom sheet wallet drawer. bottomInset clears the visible
+          UITabBarController bar (intrinsic ≈49pt + home-indicator inset)
+          so the lowest snap (25%) sits flush against the tab bar top
+          edge — the lib's TabView is translucent, so without this inset
+          the sheet content would slide under the tab labels (issue #103). */}
       <BottomSheet
         ref={sheetRef}
         index={0}
@@ -377,55 +420,17 @@ export default function App() {
         />
       </BottomSheet>
 
-      {/* Verlauf / History overlay (issue #39). Renders above the map+sheet
-          when the user taps the Verlauf tab. The demo state machine + sheet
-          remain mounted underneath — tapping any other tab returns to it.
-          Issue #100: paddingTop respects the safe-area so the title doesn't
-          collide with the status bar / Dynamic Island; bg-cream so the
-          History surface does not show map peek-through behind its scroll
-          bottom-edge. */}
-      {view === "history" ? (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            ...s("bg-cream"),
-            {
-              paddingTop: insets.top + 10,
-              paddingBottom: TAB_BAR_HEIGHT + Math.max(insets.bottom, 8),
-            },
-          ]}
-        >
-          <HistoryScreen />
-        </View>
-      ) : null}
-
-      {/* Bottom tab bar — pinned absolute, above the sheet & history overlay. */}
-      <BottomMenu
-        activeStep={step}
-        activeView={view}
-        bottomInset={insets.bottom}
-        onSelect={handleBottomMenu}
-      />
-
-      {/* Settings overlay (issue #62). Rendered last inside walletArea so it
-          stacks above the sheet, history overlay, and bottom menu. The
-          SettingsScreen itself returns null when not visible — no perf cost
-          while closed, full slide-in animation when opened. */}
-      <SettingsScreen
-        visible={settingsOpen}
-        onClose={handleCloseSettings}
-        showPrivacyEnvelope={showPrivacyEnvelope}
-        onTogglePrivacyEnvelope={handleTogglePrivacyEnvelope}
-        language={language}
-        onSetLanguage={handleSetLanguage}
-        onResetDemo={handleResetDemoFromSettings}
-        devPanelProps={devPanelProps}
-      />
+      {/* Issue #103: the History overlay, BottomMenu, and SettingsScreen
+          render have moved out of walletArea — they're now sibling NativeTabBar
+          scenes one level up (see App return). Keeping them out of the home
+          scene avoids them being mounted while another tab is active. */}
 
       {/* DevPanel overlay (issue #70 part B). Compact mode only — wide-mode
           keeps the existing right-side sidecar layout. Slides in from the
           right (translateX 100% → 0, 300ms easing-out). Tap-outside or the
-          top-right ✕ closes it. */}
+          top-right ✕ closes it. Reachable on Home via the MapTopChip on
+          the silent beat; the standalone wrench trigger was removed in
+          #103 since the Settings tab is the durable engineering entry. */}
       {!sideBySide ? (
         <DevPanelOverlay
           visible={devPanelOpen}
@@ -442,17 +447,115 @@ export default function App() {
     </View>
   );
 
+  // Per-tab scenes for the new NativeTabBar (issue #103). Each tab is a
+  // separate native UIViewController scene; the lib mounts each scene
+  // lazily on first focus and keeps it alive afterwards. The Home tab
+  // owns the demo state machine; the other 4 are standalone surfaces.
+  const offerScene = (
+    <View
+      style={[
+        ...s("flex-1 bg-ink"),
+        {
+          paddingTop: insets.top + 10,
+          paddingBottom: Math.max(insets.bottom, 8),
+        },
+      ]}
+    >
+      <ScrollView
+        style={s("flex-1")}
+        contentContainerStyle={[
+          ...s("px-5"),
+          { paddingTop: 4, paddingBottom: 24, gap: 16 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[...s("text-3xl font-black text-white"), { letterSpacing: -0.5 }]}>
+          Offer
+        </Text>
+        <Text style={s("text-sm text-white/70")}>
+          Active surfaced offer for your area. Tap below to redeem.
+        </Text>
+        <View style={[...s("rounded-2xl bg-cocoa"), { padding: 12 }]}>
+          <WidgetRenderer
+            node={demoWidgetSpecs.rainHero}
+            onRedeem={handleAdvanceFromOffer}
+          />
+        </View>
+      </ScrollView>
+    </View>
+  );
+  const qrScene = (
+    <View
+      style={[
+        ...s("flex-1 bg-ink"),
+        {
+          paddingTop: insets.top + 10,
+          paddingBottom: Math.max(insets.bottom, 8),
+        },
+      ]}
+    >
+      <RedeemFlow offer={miaRainOffer} onComplete={handleRedeemComplete} />
+    </View>
+  );
+  const historyScene = (
+    <View
+      style={[
+        ...s("flex-1 bg-cream"),
+        {
+          paddingTop: insets.top + 10,
+          paddingBottom: Math.max(insets.bottom, 8),
+        },
+      ]}
+    >
+      <HistoryScreen />
+    </View>
+  );
+  const settingsScene = (
+    <View style={s("flex-1 bg-cream")}>
+      {/* SettingsScreen owns its own slide-in animation via `visible`. As a
+          tab scene we keep it always visible — the tab swap itself is the
+          transition. Closing (X icon) routes back to the Home tab. */}
+      <SettingsScreen
+        visible
+        onClose={handleCloseSettings}
+        showPrivacyEnvelope={showPrivacyEnvelope}
+        onTogglePrivacyEnvelope={handleTogglePrivacyEnvelope}
+        language={language}
+        onSetLanguage={handleSetLanguage}
+        onResetDemo={handleResetDemoFromSettings}
+        devPanelProps={devPanelProps}
+      />
+    </View>
+  );
+  const tabScenes: Record<NativeTabKey, ReactNode> = {
+    home: walletArea,
+    offer: offerScene,
+    qr: qrScene,
+    history: historyScene,
+    settings: settingsScene,
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={s("flex-1 bg-ink")}>
         <StatusBar style="light" />
         <View style={[...s("flex-1"), { flexDirection: sideBySide ? "row" : "column" }]}>
-          {/* Compact (<820px): the wallet area is full-bleed; DevPanel access
-              is via the floating top-right icon + MapTopChip → DevPanelOverlay
-              (issue #70). Wide (≥820px): keep the existing right sidecar. */}
-          {walletArea}
-
-          {sideBySide ? <DevPanel {...devPanelProps} /> : null}
+          {/* Compact (<820px): NativeTabBar wraps the 5 scenes inside a real
+              UITabBarController (issue #103) — SF Symbol icons + native blur
+              + haptic on tap. Wide (≥820px): the wide layout is dev-only,
+              so we render the wallet area + DevPanel sidecar directly
+              without the tab bar (it would visually collide with the
+              landscape iPad / Mac sim sidecar). */}
+          {sideBySide ? (
+            <>
+              {walletArea}
+              <DevPanel {...devPanelProps} />
+            </>
+          ) : (
+            <NativeTabBar activeTab={activeTab} onChangeTab={handleChangeTab}>
+              {tabScenes}
+            </NativeTabBar>
+          )}
         </View>
       </View>
     </GestureHandlerRootView>
@@ -594,99 +697,6 @@ function OfferStack({
   );
 }
 
-function BottomMenu({
-  activeStep,
-  activeView,
-  bottomInset,
-  onSelect,
-}: {
-  activeStep: DemoStep;
-  activeView: AppView;
-  bottomInset: number;
-  onSelect: (target: BottomMenuTarget) => void;
-}) {
-  // When the History view is active none of the demo-step tabs should glow —
-  // the highlight belongs to the Verlauf tab. Demo-step tabs only highlight
-  // when the user is in the demo view.
-  const inDemo = activeView === "demo";
-
-  return (
-    <View pointerEvents="box-none" style={{ bottom: 0, left: 0, position: "absolute", right: 0 }}>
-      <View
-        style={{
-          backgroundColor: "rgba(23, 18, 15, 0.96)",
-          borderTopColor: "rgba(255, 255, 255, 0.08)",
-          borderTopWidth: 1,
-          flexDirection: "row",
-          paddingBottom: Math.max(bottomInset, 8),
-          paddingHorizontal: 18,
-          paddingTop: 8,
-        }}
-      >
-        <BottomMenuItem
-          active={inDemo && activeStep === "silent"}
-          icon="⌂"
-          label="Home"
-          onPress={() => onSelect("silent")}
-        />
-        <BottomMenuItem
-          active={inDemo && activeStep === "offer"}
-          icon="✦"
-          label="Offer"
-          onPress={() => onSelect("offer")}
-        />
-        <BottomMenuItem
-          active={inDemo && activeStep === "redeeming"}
-          icon="▣"
-          label="QR"
-          onPress={() => onSelect("redeeming")}
-        />
-        {/* History replaces the old "Proof" tab (issue #39). Clock-face glyph
-            reinforces the "wallet has memory" framing without shipping an
-            icon font. */}
-        <BottomMenuItem
-          active={activeView === "history"}
-          icon="◷"
-          label="History"
-          onPress={() => onSelect("history")}
-        />
-        {/* Settings — 5th tab (issue #87). Replaces the old gear icon that
-            lived inside the wallet sheet header. Tapping renders the
-            existing SettingsScreen as a full-page overlay. The DevPanel
-            "Demo & Debug" section inside Settings (issue #80) is still the
-            engineering surface entry point. */}
-        <BottomMenuItem
-          active={activeView === "settings"}
-          icon="⚙"
-          label="Settings"
-          onPress={() => onSelect("settings")}
-        />
-      </View>
-    </View>
-  );
-}
-
-function BottomMenuItem({
-  active,
-  icon,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  icon: string;
-  label: string;
-  onPress: () => void;
-}) {
-  const color = active ? "#f2542d" : "rgba(255, 248, 238, 0.55)";
-
-  return (
-    <Pressable onPress={onPress} style={{ alignItems: "center", flex: 1, paddingVertical: 6 }}>
-      <Text style={{ color, fontSize: 17, fontWeight: "900" }}>{icon}</Text>
-      <Text style={{ color, fontSize: 10, fontWeight: "900", marginTop: 3 }}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function VariantButton({
   active,
   label,
@@ -708,57 +718,6 @@ function VariantButton({
   );
 }
 
-function DevPanelTrigger({
-  topInset,
-  onPress,
-}: {
-  topInset: number;
-  onPress: () => void;
-}) {
-  // Small 32×32 round chip pinned top-right with a wrench glyph. Replaces
-  // the old wide horizontal "DEV_PANEL · …" strip — keeps the engineering
-  // surface within one tap on phones without occupying any vertical space
-  // above the map (issue #70 part B).
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Open dev panel"
-      onPress={onPress}
-      hitSlop={10}
-      style={({ pressed }) => [
-        {
-          position: "absolute",
-          top: Math.max(topInset, 0) + 8,
-          right: 12,
-          width: 32,
-          height: 32,
-          borderRadius: 16,
-          backgroundColor: "rgba(13, 17, 23, 0.85)",
-          borderWidth: 1,
-          borderColor: "rgba(255, 255, 255, 0.08)",
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: pressed ? 0.7 : 1,
-          zIndex: 5,
-          shadowColor: "#000",
-          shadowOpacity: 0.18,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 1 },
-          elevation: 3,
-        },
-      ]}
-    >
-      <Text
-        style={[
-          ...s("text-white"),
-          { fontSize: 14, lineHeight: 16, fontWeight: "700" },
-        ]}
-      >
-        {"\u{1F6E0}"}
-      </Text>
-    </Pressable>
-  );
-}
 
 function DevPanelOverlay({
   visible,
