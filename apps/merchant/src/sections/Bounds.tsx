@@ -1,13 +1,11 @@
 /*
- * Bounds — the merchant's contract with the LLM. Mockup for v2 (POST endpoint
- * not wired). Captures: discount floor / ceiling sliders, allowed categories,
- * opening hours / blackout windows, brand tone. Save button is cosmetic.
- *
- * Per issue #138: "Bounds Manager" agent — the merchant authors no offer copy
- * at all; instead they set bounds and the LLM generates within them.
+ * Bounds — the merchant's contract with the LLM. Discount range is a single
+ * dual-thumb slider (floor and ceiling on one track, fill between). Allowed
+ * categories, blackout windows, and brand tone live here too. Opening hours
+ * moved to Settings — they're operational fact, not a bound.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const CATEGORIES = [
   { id: "cafe", label: "Café", active: true },
@@ -18,74 +16,58 @@ const CATEGORIES = [
   { id: "bookstore", label: "Bookstore", active: false },
 ];
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SLIDER_MAX = 50;
 
 export function BoundsSection() {
   const [floor, setFloor] = useState(5);
-  const [ceiling, setCeiling] = useState(25);
+  const [ceiling, setCeiling] = useState(20);
   const [cats, setCats] = useState(() => CATEGORIES.filter((c) => c.active).map((c) => c.id));
-  const [openTime, setOpenTime] = useState("08:00");
-  const [closeTime, setCloseTime] = useState("18:00");
   const [blackoutStart, setBlackoutStart] = useState("12:00");
   const [blackoutEnd, setBlackoutEnd] = useState("13:00");
-  const [tone, setTone] = useState("Polite, no urgency language. Mention Berlin neighbourhood warmth where it fits.");
+  const [tone, setTone] = useState(
+    "Polite, no urgency language. Mention Berlin neighbourhood warmth where it fits.",
+  );
 
   return (
     <div className="section-body">
       <header className="section-head">
         <div className="section-head-text">
           <span className="eyebrow">Bounds</span>
-          <h1>Your contract with the LLM</h1>
+          <h1>Your contract with the assistant</h1>
           <p className="lead">
-            You don't author offer copy. You set the worst-case discount you'd tolerate, the
-            categories you participate in, and the windows you're open. The LLM generates
-            every offer in real time inside these bounds — never below your floor, never
-            above your ceiling, never outside your hours.
+            You don't write offer copy. You set the discount range you'll tolerate, the
+            categories you participate in, and the windows when nothing should fire. We
+            generate every offer in real time inside these bounds.
           </p>
         </div>
       </header>
 
       <section className="bounds-grid">
-        <article className="bounds-card">
+        <article className="bounds-card bounds-card-wide">
           <h2>Discount range</h2>
           <p className="bounds-help">
-            Floor is the smallest discount we'll start at. Ceiling is the largest we'll ever
-            tolerate, even after Negotiation Agent escalation.
+            Drag either end. Floor is the smallest discount we'll start at; ceiling is the
+            largest we'll ever go, even after a customer pushes back.
           </p>
-
-          <SliderRow
-            label="Floor"
-            sublabel="smallest discount we'll start at"
-            value={floor}
+          <DualSlider
             min={0}
-            max={20}
-            onChange={(v) => setFloor(Math.min(v, ceiling - 1))}
-            tone="cocoa"
+            max={SLIDER_MAX}
+            floor={floor}
+            ceiling={ceiling}
+            onChange={(f, c) => {
+              setFloor(f);
+              setCeiling(c);
+            }}
           />
-
-          <SliderRow
-            label="Ceiling"
-            sublabel="largest we'll tolerate (Negotiation Agent cap)"
-            value={ceiling}
-            min={5}
-            max={50}
-            onChange={(v) => setCeiling(Math.max(v, floor + 1))}
-            tone="spark"
-          />
-
-          <div className="bounds-band" aria-hidden>
-            <span
-              className="bounds-band-fill"
-              style={{
-                left: `${(floor / 50) * 100}%`,
-                width: `${((ceiling - floor) / 50) * 100}%`,
-              }}
-            />
-            <span className="bounds-band-label" style={{ left: `${(floor / 50) * 100}%` }}>
-              {floor}%
+          <div className="bounds-range-foot">
+            <span>
+              <strong>{floor}%</strong> floor
             </span>
-            <span className="bounds-band-label" style={{ left: `${(ceiling / 50) * 100}%` }}>
-              {ceiling}%
+            <span className="bounds-range-band">
+              {ceiling - floor}% band
+            </span>
+            <span>
+              <strong>{ceiling}%</strong> ceiling
             </span>
           </div>
         </article>
@@ -93,7 +75,7 @@ export function BoundsSection() {
         <article className="bounds-card">
           <h2>Allowed categories</h2>
           <p className="bounds-help">
-            The LLM only generates offers for categories you've opted into.
+            We only generate offers for categories you've opted into.
           </p>
           <div className="chip-row">
             {CATEGORIES.map((c) => {
@@ -117,38 +99,9 @@ export function BoundsSection() {
         </article>
 
         <article className="bounds-card">
-          <h2>Opening hours</h2>
-          <p className="bounds-help">
-            Outside this window, the Opportunity Agent will not fire offers for you.
-          </p>
-          <div className="time-row">
-            <label className="time-field">
-              <span>Open</span>
-              <input type="time" value={openTime} onChange={(e) => setOpenTime(e.target.value)} />
-            </label>
-            <span className="time-dash">—</span>
-            <label className="time-field">
-              <span>Close</span>
-              <input
-                type="time"
-                value={closeTime}
-                onChange={(e) => setCloseTime(e.target.value)}
-              />
-            </label>
-          </div>
-          <div className="day-row">
-            {DAYS.map((d) => (
-              <span key={d} className={`day-pill ${d === "Sun" ? "is-off" : ""}`}>
-                {d}
-              </span>
-            ))}
-          </div>
-        </article>
-
-        <article className="bounds-card">
           <h2>Blackout window</h2>
           <p className="bounds-help">
-            Hours where you're full and don't want surfaces fired (e.g. peak lunch).
+            Hours where you're already full and don't want offers fired (e.g. peak lunch).
           </p>
           <div className="time-row">
             <label className="time-field">
@@ -174,7 +127,7 @@ export function BoundsSection() {
         <article className="bounds-card bounds-card-wide">
           <h2>Brand tone</h2>
           <p className="bounds-help">
-            Free-text guidance the LLM weaves into every generated headline. Keep it short.
+            Free-text guidance we weave into every generated headline. Keep it short.
           </p>
           <textarea
             className="bounds-textarea"
@@ -187,10 +140,9 @@ export function BoundsSection() {
 
       <footer className="section-foot">
         <span className="foot-meta">
-          Last saved: <strong>2026-04-25 11:08</strong> · 4 offer generations under these
-          bounds today
+          Last saved: <strong>2026-04-25 11:08</strong> · 4 offers generated under these bounds today
         </span>
-        <button type="button" className="primary-button" onClick={() => undefined}>
+        <button type="button" className="primary-button">
           Save bounds
         </button>
       </footer>
@@ -198,41 +150,102 @@ export function BoundsSection() {
   );
 }
 
-function SliderRow({
-  label,
-  sublabel,
-  value,
+/* ── dual-thumb slider ──────────────────────────────────────────────────── */
+
+function DualSlider({
   min,
   max,
+  floor,
+  ceiling,
   onChange,
-  tone,
 }: {
-  label: string;
-  sublabel: string;
-  value: number;
   min: number;
   max: number;
-  onChange: (v: number) => void;
-  tone: "cocoa" | "spark";
+  floor: number;
+  ceiling: number;
+  onChange: (floor: number, ceiling: number) => void;
 }) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [drag, setDrag] = useState<null | "floor" | "ceiling">(null);
+
+  useEffect(() => {
+    if (!drag) return;
+    const handleMove = (clientX: number) => {
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const value = Math.round(min + ratio * (max - min));
+      if (drag === "floor") {
+        onChange(Math.min(value, ceiling - 1), ceiling);
+      } else {
+        onChange(floor, Math.max(value, floor + 1));
+      }
+    };
+    const onMouse = (e: MouseEvent) => handleMove(e.clientX);
+    const onTouch = (e: TouchEvent) => {
+      if (e.touches[0]) handleMove(e.touches[0].clientX);
+    };
+    const stop = () => setDrag(null);
+    window.addEventListener("mousemove", onMouse);
+    window.addEventListener("mouseup", stop);
+    window.addEventListener("touchmove", onTouch);
+    window.addEventListener("touchend", stop);
+    return () => {
+      window.removeEventListener("mousemove", onMouse);
+      window.removeEventListener("mouseup", stop);
+      window.removeEventListener("touchmove", onTouch);
+      window.removeEventListener("touchend", stop);
+    };
+  }, [drag, min, max, floor, ceiling, onChange]);
+
+  const floorPct = ((floor - min) / (max - min)) * 100;
+  const ceilingPct = ((ceiling - min) / (max - min)) * 100;
+
+  const onKey = (which: "floor" | "ceiling") => (e: React.KeyboardEvent) => {
+    let delta = 0;
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") delta = -1;
+    else if (e.key === "ArrowRight" || e.key === "ArrowUp") delta = 1;
+    if (!delta) return;
+    e.preventDefault();
+    if (which === "floor") onChange(Math.max(min, Math.min(floor + delta, ceiling - 1)), ceiling);
+    else onChange(floor, Math.min(max, Math.max(ceiling + delta, floor + 1)));
+  };
+
   return (
-    <div className="slider-row">
-      <div className="slider-row-head">
-        <div>
-          <strong>{label}</strong>
-          <small>{sublabel}</small>
-        </div>
-        <span className={`slider-value tone-${tone}`}>{value}%</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className={`slider tone-${tone}`}
+    <div className="dual-slider" ref={trackRef}>
+      <div className="dual-slider-track" />
+      <div
+        className="dual-slider-fill"
+        style={{ left: `${floorPct}%`, width: `${ceilingPct - floorPct}%` }}
       />
+      <button
+        type="button"
+        className="dual-slider-thumb is-floor"
+        style={{ left: `${floorPct}%` }}
+        aria-label={`Floor ${floor}%`}
+        aria-valuenow={floor}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        onMouseDown={() => setDrag("floor")}
+        onTouchStart={() => setDrag("floor")}
+        onKeyDown={onKey("floor")}
+      >
+        <span>{floor}%</span>
+      </button>
+      <button
+        type="button"
+        className="dual-slider-thumb is-ceiling"
+        style={{ left: `${ceilingPct}%` }}
+        aria-label={`Ceiling ${ceiling}%`}
+        aria-valuenow={ceiling}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        onMouseDown={() => setDrag("ceiling")}
+        onTouchStart={() => setDrag("ceiling")}
+        onKeyDown={onKey("ceiling")}
+      >
+        <span>{ceiling}%</span>
+      </button>
     </div>
   );
 }

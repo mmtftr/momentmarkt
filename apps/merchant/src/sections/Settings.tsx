@@ -1,6 +1,7 @@
 /*
- * Settings — payment binding, notification prefs, audit retention, team. All
- * cosmetic for the hackathon mockup; real wiring lives in the v2 portal.
+ * Settings — operational setup. Opening hours, account binding, notifications,
+ * audit retention, team. Hours moved here from Bounds — they're shop facts,
+ * not bounds on the assistant.
  */
 
 import { useState } from "react";
@@ -11,48 +12,104 @@ const TEAM = [
   { name: "Lucia Albers", role: "Barista (read-only)", email: "lucia@cafe-bondi.de", initial: "L" },
 ];
 
+const DAYS: { id: DayKey; label: string }[] = [
+  { id: "mon", label: "Mon" },
+  { id: "tue", label: "Tue" },
+  { id: "wed", label: "Wed" },
+  { id: "thu", label: "Thu" },
+  { id: "fri", label: "Fri" },
+  { id: "sat", label: "Sat" },
+  { id: "sun", label: "Sun" },
+];
+
+type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
 export function SettingsSection() {
   const [notifAccepted, setNotifAccepted] = useState(true);
   const [notifRedeemed, setNotifRedeemed] = useState(true);
   const [notifBudgetLow, setNotifBudgetLow] = useState(true);
   const [notifNegotiation, setNotifNegotiation] = useState(false);
   const [retention, setRetention] = useState("90");
+  const [openTime, setOpenTime] = useState("08:00");
+  const [closeTime, setCloseTime] = useState("18:00");
+  const [closedDays, setClosedDays] = useState<DayKey[]>(["sun"]);
 
   return (
     <div className="section-body">
       <header className="section-head">
         <div className="section-head-text">
           <span className="eyebrow">Settings</span>
-          <h1>Account, notifications, and team</h1>
+          <h1>Setup, account, and team</h1>
           <p className="lead">
-            Sparkasse account binding, notification preferences, audit retention, and team
-            access. Most of this is cosmetic for the hackathon — the full settings surface
-            ships with the v2 merchant portal.
+            Opening hours, payout binding, notifications, and who can see this dashboard.
           </p>
         </div>
       </header>
 
       <section className="settings-grid">
-        <article className="settings-card">
-          <h2>Sparkasse account binding</h2>
+        <article className="settings-card settings-card-wide">
+          <h2>Opening hours</h2>
           <p className="bounds-help">
-            Cashback redemptions settle into this account on T+1.
+            Outside this window we won't fire any offers for you, and we'll skip any day you mark closed.
+          </p>
+          <div className="time-row">
+            <label className="time-field">
+              <span>Open</span>
+              <input
+                type="time"
+                value={openTime}
+                onChange={(e) => setOpenTime(e.target.value)}
+              />
+            </label>
+            <span className="time-dash">—</span>
+            <label className="time-field">
+              <span>Close</span>
+              <input
+                type="time"
+                value={closeTime}
+                onChange={(e) => setCloseTime(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="day-row">
+            {DAYS.map((d) => {
+              const closed = closedDays.includes(d.id);
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  className={`day-pill ${closed ? "is-off" : "is-on"}`}
+                  onClick={() =>
+                    setClosedDays((current) =>
+                      closed ? current.filter((x) => x !== d.id) : [...current, d.id],
+                    )
+                  }
+                >
+                  {d.label}
+                </button>
+              );
+            })}
+          </div>
+        </article>
+
+        <article className="settings-card">
+          <h2>Payout account</h2>
+          <p className="bounds-help">
+            Cashback redemptions settle here on the next business day.
           </p>
           <div className="binding-row">
             <div className="binding-meta">
               <span className="binding-bank">Berliner Sparkasse</span>
               <code>DE89 ••• ••• ••• 4521</code>
-              <small>Bound 2026-04-12 · OAuth via Sparkassen-Finanzportal</small>
+              <small>Bound 2026-04-12</small>
             </div>
             <button type="button" className="ghost-button">Re-bind</button>
           </div>
         </article>
 
         <article className="settings-card">
-          <h2>Notification preferences</h2>
-          <p className="bounds-help">
-            Email + push when these events fire under your bounds.
-          </p>
+          <h2>Notifications</h2>
+          <p className="bounds-help">Email + push when these events fire.</p>
           <ToggleRow
             label="Offer accepted"
             sublabel="A customer saved a generated offer to their wallet"
@@ -66,23 +123,23 @@ export function SettingsSection() {
             onChange={setNotifRedeemed}
           />
           <ToggleRow
-            label="Daily budget &lt; 20%"
-            sublabel="So you can decide whether to top-up before peak hours"
+            label="Daily budget low (under 20%)"
+            sublabel="Heads-up before peak hours"
             value={notifBudgetLow}
             onChange={setNotifBudgetLow}
           />
           <ToggleRow
-            label="Negotiation Agent escalation"
-            sublabel="When a discount is auto-pushed near your ceiling (v2)"
+            label="Discount near your ceiling"
+            sublabel="When a generated discount is pushed close to your max"
             value={notifNegotiation}
             onChange={setNotifNegotiation}
           />
         </article>
 
         <article className="settings-card">
-          <h2>Audit log retention</h2>
+          <h2>History retention</h2>
           <p className="bounds-help">
-            How long generations stay in your audit log before being hashed-only.
+            How long we keep generated offer copy in your history before it's hashed only.
           </p>
           <select
             className="retention-select"
@@ -92,19 +149,13 @@ export function SettingsSection() {
             <option value="30">30 days</option>
             <option value="90">90 days (recommended)</option>
             <option value="180">180 days</option>
-            <option value="365">365 days (Sparkasse maximum)</option>
+            <option value="365">365 days</option>
           </select>
-          <small className="retention-hint">
-            Per Sparkassen data policy, retention beyond 365 days requires written merchant
-            request.
-          </small>
         </article>
 
         <article className="settings-card settings-card-wide">
-          <h2>Team members</h2>
-          <p className="bounds-help">
-            Who can read this dashboard and modify your bounds.
-          </p>
+          <h2>Team</h2>
+          <p className="bounds-help">Who can see this dashboard and edit your bounds.</p>
           <ul className="team-list">
             {TEAM.map((member) => (
               <li key={member.email} className="team-row">
@@ -123,12 +174,16 @@ export function SettingsSection() {
 
       <footer className="section-foot">
         <span className="foot-meta">
-          Merchant ID <code>berlin-mitte-cafe-bondi</code> · plan: <strong>City Pilot</strong>
+          {merchantLine()}
         </span>
         <button type="button" className="primary-button">Save changes</button>
       </footer>
     </div>
   );
+}
+
+function merchantLine() {
+  return "Cafe Bondi · Berlin Mitte · City Pilot plan";
 }
 
 function ToggleRow({
@@ -145,7 +200,7 @@ function ToggleRow({
   return (
     <label className="toggle-row">
       <div>
-        <strong dangerouslySetInnerHTML={{ __html: label }} />
+        <strong>{label}</strong>
         <small>{sublabel}</small>
       </div>
       <button

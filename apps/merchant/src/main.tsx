@@ -1,54 +1,53 @@
 /*
- * Merchant dashboard shell — left-rail nav + section router. The Today
- * section is fully wired to /merchants/{id}/summary; Bounds, Audit log,
- * Performance, Insights, and Settings are credible mockups that telegraph
- * the v2 vision per issue #138.
+ * Merchant dashboard shell — left-rail nav + section router. Four sections:
+ * Today (overview), Offers (list/detail), Bounds (discount range + tone +
+ * categories + blackouts), Settings (opening hours + account + team).
  */
 
-import { type ReactNode, StrictMode, useState } from "react";
+import { type ReactNode, StrictMode, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ApiStatus } from "./ApiStatus";
 import { merchantFixture } from "./data/merchantStats";
 import { OnboardingShell } from "./onboarding/OnboardingShell";
 import { isOnboarded, ONBOARDED_FLAG } from "./onboarding/state/onboardingMachine";
 import {
-  AuditIcon,
   BoundsIcon,
-  InsightsIcon,
-  PerformanceIcon,
+  OffersIcon,
   SettingsIcon,
   TodayIcon,
 } from "./icons/NavIcons";
-import { AuditLogSection } from "./sections/AuditLog";
 import { BoundsSection } from "./sections/Bounds";
-import { InsightsSection } from "./sections/Insights";
-import { PerformanceSection } from "./sections/Performance";
+import { OffersSection } from "./sections/Offers";
 import { SettingsSection } from "./sections/Settings";
 import { TodaySection } from "./sections/Today";
 import "./styles.css";
 
-type SectionId = "today" | "bounds" | "audit" | "performance" | "insights" | "settings";
+type SectionId = "today" | "offers" | "bounds" | "settings";
 
 type SectionDef = {
   id: SectionId;
   label: string;
   Icon: (p: { className?: string }) => ReactNode;
   hint: string;
-  status: "live" | "mockup";
 };
 
 const SECTIONS: SectionDef[] = [
-  { id: "today", label: "Today", Icon: TodayIcon, hint: "live moments + counters", status: "live" },
-  { id: "bounds", label: "Bounds", Icon: BoundsIcon, hint: "your contract with the LLM", status: "mockup" },
-  { id: "audit", label: "Audit log", Icon: AuditIcon, hint: "every generation, in order", status: "mockup" },
-  { id: "performance", label: "Performance", Icon: PerformanceIcon, hint: "conversion + windows", status: "mockup" },
-  { id: "insights", label: "Insights", Icon: InsightsIcon, hint: "anonymous aggregates", status: "mockup" },
-  { id: "settings", label: "Settings", Icon: SettingsIcon, hint: "account + team", status: "mockup" },
+  { id: "today", label: "Today", Icon: TodayIcon, hint: "your day at a glance" },
+  { id: "offers", label: "Offers", Icon: OffersIcon, hint: "approve, deny, set patterns" },
+  { id: "bounds", label: "Bounds", Icon: BoundsIcon, hint: "your contract with the assistant" },
+  { id: "settings", label: "Settings", Icon: SettingsIcon, hint: "hours, account, team" },
 ];
 
 function App() {
   const [active, setActive] = useState<SectionId>("today");
+  const [focusedOfferId, setFocusedOfferId] = useState<string | null>(null);
   const [onboarded, setOnboardedState] = useState<boolean>(() => isOnboarded());
+
+  const jumpToOffer = useCallback((id: string) => {
+    setFocusedOfferId(id);
+    setActive("offers");
+  }, []);
+  const clearFocus = useCallback(() => setFocusedOfferId(null), []);
 
   if (!onboarded) {
     return (
@@ -90,11 +89,6 @@ function App() {
                   <strong>{section.label}</strong>
                   <small>{section.hint}</small>
                 </span>
-                {section.status === "mockup" ? (
-                  <span className="rail-mockup-tag">v2</span>
-                ) : (
-                  <span className="rail-live-dot" aria-hidden />
-                )}
               </button>
             );
           })}
@@ -127,11 +121,16 @@ function App() {
       </aside>
 
       <section className="canvas" role="region" aria-live="polite">
-        {active === "today" ? <TodaySection /> : null}
+        {active === "today" ? (
+          <TodaySection
+            onJumpToOffer={jumpToOffer}
+            onJumpToOffersTab={() => setActive("offers")}
+          />
+        ) : null}
+        {active === "offers" ? (
+          <OffersSection focusedOfferId={focusedOfferId} clearFocus={clearFocus} />
+        ) : null}
         {active === "bounds" ? <BoundsSection /> : null}
-        {active === "audit" ? <AuditLogSection /> : null}
-        {active === "performance" ? <PerformanceSection /> : null}
-        {active === "insights" ? <InsightsSection /> : null}
         {active === "settings" ? <SettingsSection /> : null}
       </section>
     </main>

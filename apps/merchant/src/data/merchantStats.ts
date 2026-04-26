@@ -53,6 +53,9 @@ export type Moment = {
   source: "live" | "fixture";
   headline: string;
   triggerLine: string;
+  triggerKind: TriggerKind;
+  category: string;
+  discountPct: number;
   status: MomentStatus;
   expiresAt: string;
   redemptions: number;
@@ -60,6 +63,7 @@ export type Moment = {
   budgetTotal: number;
   budgetSpent: number;
   widgetSpec: unknown;
+  inventoryGoal?: number;
 };
 
 export function findCafeBondi() {
@@ -214,6 +218,17 @@ function normalizeStatus(raw: string): MomentStatus {
   return "pending_approval";
 }
 
+function deriveDiscountPct(offer: { cashback_eur: number; budget_total: number }): number {
+  // No explicit discount field on the wire; cashback per redeem is a clean
+  // proxy. €2 cashback → ~10% off a €20 ticket; €4 → ~20%; clamp so the
+  // pattern-rule cap stays inside merchant bounds.
+  const pct = Math.round(offer.cashback_eur * 5);
+  return Math.max(5, Math.min(25, pct));
+}
+
+const fallbackInventoryGoal = merchantFixture.inventory_goal?.target_redemptions ?? 12;
+const fallbackCategory = (merchantFixture as { category?: string }).category ?? "cafe";
+
 export function offersToMoments(stats: MerchantStats | null): Moment[] {
   if (!stats || stats.offers.length === 0) {
     return [
@@ -222,6 +237,9 @@ export function offersToMoments(stats: MerchantStats | null): Moment[] {
         source: "fixture",
         headline: fallbackHeadline,
         triggerLine: fallbackTrigger,
+        triggerKind: "rain",
+        category: fallbackCategory,
+        discountPct: 12,
         status: "auto_approved",
         expiresAt: fallbackExpires,
         redemptions: 0,
@@ -229,6 +247,7 @@ export function offersToMoments(stats: MerchantStats | null): Moment[] {
         budgetTotal: totalBudget,
         budgetSpent: 0,
         widgetSpec: fallbackWidgetSpec,
+        inventoryGoal: fallbackInventoryGoal,
       },
     ];
   }
@@ -240,6 +259,9 @@ export function offersToMoments(stats: MerchantStats | null): Moment[] {
       offer.copy_seed.headline_en ||
       offer.merchant_name,
     triggerLine: deriveTriggerLine(offer.trigger_reason),
+    triggerKind: extractTriggerKind(offer.trigger_reason),
+    category: offer.category,
+    discountPct: deriveDiscountPct(offer),
     status: normalizeStatus(offer.status),
     expiresAt: offer.valid_window?.end || fallbackExpires,
     redemptions: offer.redemptions,
@@ -247,6 +269,7 @@ export function offersToMoments(stats: MerchantStats | null): Moment[] {
     budgetTotal: offer.budget_total,
     budgetSpent: offer.budget_spent,
     widgetSpec: offer.widget_spec,
+    inventoryGoal: fallbackInventoryGoal,
   }));
 }
 
@@ -259,5 +282,40 @@ export const STATUS_LABELS: Record<
   pending_approval: { label: "Awaiting review", pillClass: "is-pending", dotClass: "is-rain" },
   rejected: { label: "Rejected", pillClass: "is-rejected", dotClass: "is-rain" },
 };
+
+// Trigger taxonomy used by pattern rules ("Block rain-time offers for cocoa")
+export type TriggerKind = "rain" | "demand" | "event" | "time";
+
+export const TRIGGER_LABELS: Record<TriggerKind, { word: string; tone: string }> = {
+  rain: { word: "rain-time", tone: "is-rain" },
+  demand: { word: "quiet-hour", tone: "is-spark" },
+  event: { word: "nearby-event", tone: "is-cocoa" },
+  time: { word: "off-peak", tone: "is-cocoa" },
+};
+
+export function extractTriggerKind(triggerReason: StoredOffer["trigger_reason"]): TriggerKind {
+  if (typeof triggerReason === "string") {
+    const lower = triggerReason.toLowerCase();
+    if (lower.includes("rain") || lower.includes("weather")) return "rain";
+    if (lower.includes("event") || lower.includes("concert")) return "event";
+    return "demand";
+  }
+  if (!triggerReason || typeof triggerReason !== "object") return "demand";
+  const weather = (triggerReason as { weather_trigger?: string | null }).weather_trigger;
+  if (weather) return "rain";
+  if ((triggerReason as { event_trigger?: boolean }).event_trigger) return "event";
+  if ((triggerReason as { demand_trigger?: boolean }).demand_trigger) return "demand";
+  return "time";
+}
+
+export function categoryWord(category: string): string {
+  const c = category.toLowerCase();
+  if (c.includes("cafe") || c.includes("coffee")) return "cocoa";
+  if (c.includes("bakery") || c.includes("bread")) return "bakery";
+  if (c.includes("bar") || c.includes("drink")) return "drinks";
+  if (c.includes("kiosk")) return "kiosk";
+  if (c.includes("restaurant") || c.includes("food")) return "food";
+  return c || "this category";
+}
 
 export { density };

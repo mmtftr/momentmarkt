@@ -1,338 +1,487 @@
 /*
- * Today — the only fully wired section. Hosts the Moments feed (left rail of
- * the inbox grid) and the detail panel (signal evidence → customer-widget
- * mirror → live counters → matched rule). Polls /merchants/{id}/summary every
- * 2s through useMerchantStats.
+ * Today — overview canvas. Daily briefing → live demand curve + ROI strip →
+ * row of active-offer mini-cards (each with an inventory burndown ring).
+ * Pending chip in the header counts offers awaiting approval and routes to
+ * the Offers section.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { WidgetRenderer } from "../genui/WidgetRenderer";
 import {
-  approvalRule,
   euro,
   MERCHANT_ID,
   merchantFixture as merchant,
-  type Moment,
   type MerchantPollState,
+  type Moment,
+  type MerchantStats,
   offersToMoments,
   percent,
   shortTime,
-  STATUS_LABELS,
-  totalBudget,
   useMerchantStats,
 } from "../data/merchantStats";
+import { mergeMomentsById, seedHistoricalMoments } from "../data/seededMoments";
 
-export function TodaySection() {
+type Props = {
+  onJumpToOffer: (id: string) => void;
+  onJumpToOffersTab: () => void;
+};
+
+export function TodaySection({ onJumpToOffer, onJumpToOffersTab }: Props) {
   const poll = useMerchantStats(MERCHANT_ID, 2000);
-  const moments = useMemo(() => offersToMoments(poll.stats), [poll.stats]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const seeded = useMemo(seedHistoricalMoments, []);
+  const liveMoments = useMemo(() => offersToMoments(poll.stats), [poll.stats]);
+  // Same merge as Offers so the pending-chip count matches what the merchant
+  // would see on click-through.
+  const moments = useMemo(() => mergeMomentsById(seeded, liveMoments), [seeded, liveMoments]);
 
-  const selected =
-    moments.find((m) => m.id === selectedId) ?? moments[0] ?? null;
+  const active = moments.filter(
+    (m) =>
+      (m.status === "auto_approved" || m.status === "approved") && isFiringNow(m.expiresAt),
+  );
+  const pending = moments.filter((m) => m.status === "pending_approval");
 
-  useEffect(() => {
-    if (selected && selected.id !== selectedId) {
-      setSelectedId(selected.id);
-    }
-  }, [selected, selectedId]);
-
-  const totals = poll.stats ?? null;
-  const surfaced = totals?.surfaced ?? 0;
-  const redeemed = totals?.redeemed ?? selected?.redemptions ?? 0;
-  const accepted = Math.max(redeemed, totals?.offer_count ?? 1);
-  const budgetTotal = totals?.budget_total || selected?.budgetTotal || totalBudget;
-  const budgetSpent = totals?.budget_spent ?? selected?.budgetSpent ?? 0;
-  const remaining = Math.max(0, budgetTotal - budgetSpent);
-  const budgetUsedPct = budgetTotal
-    ? Math.min(100, Math.round((budgetSpent / budgetTotal) * 100))
-    : 0;
+  const stats = poll.stats;
+  const surfaced = stats?.surfaced ?? 0;
+  const redeemed = stats?.redeemed ?? 0;
+  const hasFiredToday = surfaced > 0 || redeemed > 0;
 
   return (
     <div className="section-body">
-      <SectionHeader
-        eyebrow="Today"
-        title="Live moments at Cafe Bondi"
-        lead="Every active offer the LLM has fired under your bounds, with the customer-side widget rendered byte-for-byte from the same GenUI JSON."
-        right={<TodaySummaryPills poll={poll} surfaced={surfaced} redeemed={redeemed} />}
-      />
-
-      <section className="inbox">
-        <Feed moments={moments} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-
-        <div className="detail">
-          {selected ? (
-            <>
-              <SignalEvidence />
-              <MirrorSection moment={selected} />
-              <CountersSection
-                surfaced={surfaced}
-                accepted={accepted}
-                redeemed={redeemed}
-                remaining={remaining}
-                budgetSpent={budgetSpent}
-                budgetTotal={budgetTotal}
-                budgetUsedPct={budgetUsedPct}
-              />
-              <MatchedRule />
-            </>
-          ) : null}
+      <header className="section-head">
+        <div className="section-head-text">
+          <span className="eyebrow">Today</span>
+          <h1>{merchant.display_name} · {todayWord()}</h1>
+          <p className="lead">
+            Your day at a glance — what we're expecting, how it's playing out, and
+            anything we need you to look at.
+          </p>
         </div>
-      </section>
+        <div className="section-head-right">
+          <PendingChip count={pending.length} onClick={onJumpToOffersTab} />
+        </div>
+      </header>
+
+      <BriefingCard collapsed={hasFiredToday} surfaced={surfaced} redeemed={redeemed} />
+
+      <div className="today-row">
+        <TodayCurve poll={poll} />
+        <RoiStrip stats={stats} />
+      </div>
+
+      <ActiveStrip moments={active} onJumpToOffer={onJumpToOffer} />
     </div>
   );
 }
 
-function SectionHeader({
-  eyebrow,
-  title,
-  lead,
-  right,
-}: {
-  eyebrow: string;
-  title: string;
-  lead?: string;
-  right?: React.ReactNode;
-}) {
+function todayWord() {
+  return new Intl.DateTimeFormat("en", { weekday: "long" }).format(new Date());
+}
+
+/* ── pending chip ───────────────────────────────────────────────────────── */
+
+function PendingChip({ count, onClick }: { count: number; onClick: () => void }) {
+  if (count === 0) {
+    return (
+      <span className="pending-chip is-empty">
+        <span className="pending-chip-dot" /> No offers waiting
+      </span>
+    );
+  }
   return (
-    <header className="section-head">
-      <div className="section-head-text">
-        <span className="eyebrow">{eyebrow}</span>
-        <h1>{title}</h1>
-        {lead ? <p className="lead">{lead}</p> : null}
-      </div>
-      {right ? <div className="section-head-right">{right}</div> : null}
-    </header>
+    <button type="button" className="pending-chip is-active" onClick={onClick}>
+      <span className="pending-chip-dot" />
+      <strong>{count}</strong>
+      &nbsp;{count === 1 ? "offer" : "offers"} waiting for you →
+    </button>
   );
 }
 
-function TodaySummaryPills({
-  poll,
+/* ── briefing card ──────────────────────────────────────────────────────── */
+
+function BriefingCard({
+  collapsed,
   surfaced,
   redeemed,
 }: {
-  poll: MerchantPollState;
+  collapsed: boolean;
   surfaced: number;
   redeemed: number;
 }) {
-  const live = Boolean(poll.stats && !poll.error);
+  const greet = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
+  const stamp = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en", { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(
+        new Date(),
+      ),
+    [],
+  );
+
+  if (collapsed) {
+    return (
+      <article className="briefing is-collapsed">
+        <div className="briefing-line">
+          <span className="briefing-line-mark" aria-hidden />
+          <strong>{surfaced}</strong> surfaced · <strong>{redeemed}</strong> redeemed so far today.
+          Rain-trigger window holds through 15:00.
+        </div>
+      </article>
+    );
+  }
+
   return (
-    <div className="head-pills">
-      <span className={`head-pill ${live ? "is-live" : "is-fixture"}`}>
-        <span className="head-pill-dot" />
-        {live ? "Live" : "Fixture"}
-      </span>
-      <span className="head-pill is-muted">
-        <strong>{surfaced}</strong>&nbsp;surfaced
-      </span>
-      <span className="head-pill is-muted">
-        <strong>{redeemed}</strong>&nbsp;redeemed
-      </span>
-    </div>
+    <article className="briefing">
+      <div className="greet">{greet} · {stamp}</div>
+      <h3>
+        Rain rolls into Mitte at 13:00. Expect a 50%+ lunch gap — we've prepped 3 candidate
+        moments inside your bounds.
+      </h3>
+      <div className="briefing-grid">
+        <div className="briefing-cell">
+          <div className="l">Weather window</div>
+          <div className="v">13:00–15:00</div>
+          <div className="m">Light rain, 4 mm/h</div>
+        </div>
+        <div className="briefing-cell">
+          <div className="l">Expected demand gap</div>
+          <div className="v">~−54% at 13:30</div>
+          <div className="m">vs typical {todayWord()}</div>
+        </div>
+        <div className="briefing-cell">
+          <div className="l">Prepared moments</div>
+          <div className="v">3 candidates</div>
+          <div className="m">Cocoa + bread · cortado bundle · cake slot</div>
+        </div>
+      </div>
+      <div className="briefing-foot">
+        <span>None will fire outside your hours or below your floor.</span>
+      </div>
+    </article>
   );
 }
 
-function Feed({
-  moments,
-  selectedId,
-  onSelect,
-}: {
-  moments: Moment[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}) {
+/* ── live demand curve (compact, with now-dot) ──────────────────────────── */
+
+const TYPICAL_CURVE: { t: number; d: number }[] = [
+  { t: 8, d: 22 }, { t: 9, d: 38 }, { t: 10, d: 56 }, { t: 11, d: 70 },
+  { t: 12, d: 84 }, { t: 13, d: 92 }, { t: 14, d: 78 }, { t: 15, d: 60 },
+  { t: 16, d: 52 }, { t: 17, d: 64 }, { t: 18, d: 70 }, { t: 19, d: 58 },
+  { t: 20, d: 36 }, { t: 21, d: 22 }, { t: 22, d: 14 },
+];
+
+const LIVE_CURVE: { t: number; d: number }[] = [
+  { t: 8, d: 18 }, { t: 9, d: 30 }, { t: 10, d: 44 }, { t: 11, d: 50 },
+  { t: 12, d: 48 }, { t: 13, d: 42 }, { t: 14, d: 36 }, { t: 15, d: 32 },
+];
+
+function TodayCurve({ poll }: { poll: MerchantPollState }) {
+  const now = useNowMinutes();
+  const liveAtNow = sampleCurve(LIVE_CURVE, now);
+  const typicalAtNow = sampleCurve(TYPICAL_CURVE, now);
+  const gap = typicalAtNow > 0 ? (liveAtNow - typicalAtNow) / typicalAtNow : 0;
+  const live = Boolean(poll.stats && !poll.error);
+
+  const W = 480;
+  const H = 150;
+  const padL = 32;
+  const padR = 12;
+  const padT = 12;
+  const padB = 22;
+  const xMin = 8 * 60;
+  const xMax = 22 * 60;
+  const x = (m: number) => padL + ((m - xMin) / (xMax - xMin)) * (W - padL - padR);
+  const y = (d: number) => padT + (1 - d / 100) * (H - padT - padB);
+
+  const typicalPath = TYPICAL_CURVE.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.t * 60).toFixed(1)} ${y(p.d).toFixed(1)}`).join(" ");
+  const typicalArea =
+    `M ${x(TYPICAL_CURVE[0].t * 60).toFixed(1)} ${(H - padB).toFixed(1)} ` +
+    TYPICAL_CURVE.map((p) => `L ${x(p.t * 60).toFixed(1)} ${y(p.d).toFixed(1)}`).join(" ") +
+    ` L ${x(TYPICAL_CURVE[TYPICAL_CURVE.length - 1].t * 60).toFixed(1)} ${(H - padB).toFixed(1)} Z`;
+  const livePath = LIVE_CURVE.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.t * 60).toFixed(1)} ${y(p.d).toFixed(1)}`).join(" ");
+
+  const ticks = [9, 12, 15, 18, 21];
+
   return (
-    <aside className="feed" aria-label="Moments feed">
-      <div className="feed-heading">
-        <span className="eyebrow">Moments</span>
+    <article className="today-curve">
+      <header className="today-curve-head">
+        <div>
+          <span className="eyebrow">Live demand</span>
+          <h2>
+            {gap < -0.05
+              ? `${percent(Math.abs(gap))} below typical`
+              : gap > 0.05
+              ? `${percent(gap)} above typical`
+              : "Tracking typical"}
+          </h2>
+          <p className="lead">
+            {nowLabel(now)} · today's foot traffic vs your usual {todayWord().toLowerCase()}.
+          </p>
+        </div>
+        <span className={`head-pill ${live ? "is-live" : "is-muted"}`}>
+          <span className="head-pill-dot" /> {live ? "Live" : "Connecting"}
+        </span>
+      </header>
+      <svg viewBox={`0 0 ${W} ${H}`} className="today-curve-svg" role="img" aria-label="Live demand curve">
+        {[0, 50, 100].map((t) => (
+          <line key={t} x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} className="ob-chart-grid" />
+        ))}
+        {ticks.map((h) => (
+          <text key={h} x={x(h * 60)} y={H - 6} textAnchor="middle" className="ob-chart-axis-label">
+            {`${h.toString().padStart(2, "0")}:00`}
+          </text>
+        ))}
+        <path d={typicalArea} className="ob-chart-baseline-area" />
+        <path d={typicalPath} className="ob-chart-baseline-line" />
+        <path d={livePath} className="ob-chart-live-line" />
+        <circle
+          cx={x(now)}
+          cy={y(liveAtNow)}
+          r={5}
+          className="today-curve-dot"
+        />
+        <circle
+          cx={x(now)}
+          cy={y(liveAtNow)}
+          r={5}
+          className="today-curve-dot-pulse"
+        />
+      </svg>
+      <div className="today-curve-legend">
+        <span className="ob-chart-legend-item">
+          <span className="ob-chart-legend-dot is-baseline" /> Typical
+        </span>
+        <span className="ob-chart-legend-item">
+          <span className="ob-chart-legend-dot is-live" /> Today
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function sampleCurve(curve: { t: number; d: number }[], minutes: number): number {
+  const hours = minutes / 60;
+  if (hours <= curve[0].t) return curve[0].d;
+  if (hours >= curve[curve.length - 1].t) return curve[curve.length - 1].d;
+  for (let i = 0; i < curve.length - 1; i++) {
+    const a = curve[i];
+    const b = curve[i + 1];
+    if (hours >= a.t && hours <= b.t) {
+      const f = (hours - a.t) / (b.t - a.t);
+      return a.d + f * (b.d - a.d);
+    }
+  }
+  return curve[curve.length - 1].d;
+}
+
+function nowLabel(minutes: number) {
+  const h = Math.floor(minutes / 60);
+  const m = Math.floor(minutes % 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function useNowMinutes() {
+  const [m, setM] = useState(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  });
+  useEffect(() => {
+    const id = setInterval(() => {
+      const d = new Date();
+      setM(d.getHours() * 60 + d.getMinutes());
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+  // For demo: clamp into the live window so the dot is always visible on the
+  // sample curve, which only covers 08:00–15:00.
+  return Math.max(8 * 60, Math.min(15 * 60, m));
+}
+
+/* ── ROI strip (lighter) ────────────────────────────────────────────────── */
+
+function RoiStrip({ stats }: { stats: MerchantStats | null }) {
+  const redeemed = stats?.redeemed ?? 0;
+  const spent = stats?.budget_spent ?? 0;
+  // Demo math: incremental revenue ≈ redemptions * avg ticket - cashback.
+  // Baseline = a typical Saturday number from the catalog, scripted for the
+  // hackathon demo. Real wiring would join /merchants/{id}/summary against a
+  // baselines.json keyed by day-of-week.
+  const baselineRedeemed = 11;
+  const avgTicket = 8.4;
+  const incremental = Math.max(0, Math.round(redeemed * avgTicket - spent));
+  const lift = baselineRedeemed > 0
+    ? Math.round(((redeemed - baselineRedeemed) / baselineRedeemed) * 100)
+    : 0;
+
+  return (
+    <article className="roi-strip" aria-label="Today's revenue versus baseline">
+      <header className="roi-strip-head">
+        <span className="eyebrow">Net incremental</span>
+        <h2>+{euro(incremental)}</h2>
+        <p className="lead">vs typical {todayWord().toLowerCase()}</p>
+      </header>
+      <dl className="roi-strip-list">
+        <div className="roi-strip-row">
+          <dt>Redeemed today</dt>
+          <dd><strong>{redeemed}</strong> <span>vs {baselineRedeemed} baseline</span></dd>
+        </div>
+        <div className="roi-strip-row">
+          <dt>Cashback paid</dt>
+          <dd><strong>{euro(spent)}</strong> <span>across {redeemed || "—"} redemptions</span></dd>
+        </div>
+        <div className="roi-strip-row">
+          <dt>Lift</dt>
+          <dd className={lift >= 0 ? "is-good" : "is-warn"}>
+            <strong>{lift >= 0 ? "+" : ""}{lift}%</strong> <span>vs baseline</span>
+          </dd>
+        </div>
+      </dl>
+      <button type="button" className="roi-strip-foot" aria-label="See full breakdown">
+        See breakdown →
+      </button>
+    </article>
+  );
+}
+
+/* ── active strip: mini-cards with burndown rings ───────────────────────── */
+
+function ActiveStrip({ moments, onJumpToOffer }: { moments: Moment[]; onJumpToOffer: (id: string) => void }) {
+  if (moments.length === 0) {
+    return (
+      <article className="active-empty">
+        <span className="eyebrow">Active offers</span>
+        <h2>Nothing's firing right now.</h2>
+        <p className="lead">When the next signal crosses, you'll see it here.</p>
+      </article>
+    );
+  }
+  return (
+    <section className="active-strip" aria-label="Active offers">
+      <div className="active-strip-head">
+        <span className="eyebrow">Active right now</span>
         <span className="count">{moments.length}</span>
       </div>
-      {moments.map((moment) => (
-        <FeedCard
-          key={moment.id}
-          moment={moment}
-          isSelected={moment.id === selectedId}
-          onClick={() => onSelect(moment.id)}
-        />
-      ))}
-    </aside>
+      <div className="active-strip-grid">
+        {moments.slice(0, 3).map((m) => (
+          <ActiveMini key={m.id} moment={m} onClick={() => onJumpToOffer(m.id)} />
+        ))}
+      </div>
+    </section>
   );
 }
 
-function FeedCard({
-  moment,
-  isSelected,
-  onClick,
-}: {
-  moment: Moment;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const status = STATUS_LABELS[moment.status];
-  const used = moment.budgetTotal
-    ? Math.min(100, Math.round((moment.budgetSpent / moment.budgetTotal) * 100))
-    : 0;
-  const previousRedemptions = useRef(moment.redemptions);
+function ActiveMini({ moment, onClick }: { moment: Moment; onClick: () => void }) {
+  const goal = moment.inventoryGoal ?? 12;
+  const done = moment.redemptions;
+  const expiresMs = useExpiresIn(moment.expiresAt);
+  const previousRedemptions = useRef(done);
   const [pulseKey, setPulseKey] = useState(0);
   useEffect(() => {
-    if (previousRedemptions.current !== moment.redemptions) {
-      previousRedemptions.current = moment.redemptions;
+    if (previousRedemptions.current !== done) {
+      previousRedemptions.current = done;
       setPulseKey((k) => k + 1);
     }
-  }, [moment.redemptions]);
+  }, [done]);
 
   return (
-    <button
-      type="button"
-      className={`feed-card ${isSelected ? "is-selected" : ""}`}
-      onClick={onClick}
-      key={pulseKey}
-    >
-      <span className={`feed-status-dot ${status.dotClass}`} aria-hidden />
-      <div className="feed-card-body">
-        <div className="feed-card-topline">
-          <span>{shortTime(moment.expiresAt)} expiry</span>
-          <span>{moment.source === "fixture" ? "Fixture" : "Live"}</span>
-        </div>
+    <button type="button" className="active-mini" onClick={onClick} key={pulseKey}>
+      <BurndownRing value={done} goal={goal} />
+      <div className="active-mini-body">
         <h3>{moment.headline}</h3>
-        <p className="trigger">{moment.triggerLine}</p>
-        <div className="feed-card-foot">
-          <span className={`feed-pill ${status.pillClass}`}>{status.label}</span>
-          <span className="feed-bar" aria-hidden>
-            <span style={{ width: `${used}%` }} />
-          </span>
-          <span className="feed-bar-meta">
-            {moment.redemptions}/
-            {Math.max(
-              1,
-              Math.round(moment.budgetTotal / Math.max(moment.cashbackPerRedeem, 1)),
-            )}
-          </span>
+        <p className="active-mini-trigger">{moment.triggerLine}</p>
+        <div className="active-mini-foot">
+          <span>{done}/{goal} redeemed</span>
+          <span>·</span>
+          <span>{expiresMs > 0 ? formatCountdown(expiresMs) : `expires ${shortTime(moment.expiresAt)}`}</span>
         </div>
       </div>
     </button>
   );
 }
 
-function SignalEvidence() {
+function BurndownRing({ value, goal }: { value: number; goal: number }) {
+  const pct = goal > 0 ? Math.min(1, value / goal) : 0;
+  const r = 28;
+  const c = 2 * Math.PI * r;
+  const dash = c * pct;
+  const paceFraction = expectedPaceFraction();
+  const paceDash = c * paceFraction;
   return (
-    <section className="detail-section" aria-label="Signal evidence">
-      <span className="section-eyebrow">Signal evidence</span>
-      <h2>Why this moment fired</h2>
-      <p className="lead">
-        Three signals crossed for {merchant.display_name} at 13:30 — the rule that watches
-        rain + demand gap auto-approved without merchant review.
-      </p>
-      <div className="signal-row">
-        <article className="signal-chip is-rain">
-          <span className="label">Weather</span>
-          <strong>Rain incoming</strong>
-        </article>
-        <article className="signal-chip is-spark">
-          <span className="label">Demand gap</span>
-          <strong>{percent(merchant.demand_gap.gap_ratio)} below usual</strong>
-        </article>
-        <article className="signal-chip is-cocoa">
-          <span className="label">Distance</span>
-          <strong>{merchant.distance_m} m from Mia</strong>
-        </article>
-      </div>
-    </section>
-  );
-}
-
-function MirrorSection({ moment }: { moment: Moment }) {
-  return (
-    <section className="detail-section detail-mirror" aria-label="Customer widget mirror">
-      <div className="mirror-copy">
-        <span className="section-eyebrow">What Mia sees</span>
-        <h2>Same widget, same moment.</h2>
-        <p className="lead">
-          The merchant inbox renders the customer widget from the same GenUI JSON the wallet
-          consumes — what's approved here is what surfaces in Mia's pocket, byte-for-byte.
-        </p>
-        <p className="lead">
-          <strong style={{ color: "var(--cocoa)" }}>{moment.headline}</strong> — expires{" "}
-          {shortTime(moment.expiresAt)}.
-        </p>
-      </div>
-      <div className="phone-frame" aria-hidden>
-        <div className="phone-frame-screen">
-          <WidgetRenderer node={moment.widgetSpec} />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CountersSection({
-  surfaced,
-  accepted,
-  redeemed,
-  remaining,
-  budgetSpent,
-  budgetTotal,
-  budgetUsedPct,
-}: {
-  surfaced: number;
-  accepted: number;
-  redeemed: number;
-  remaining: number;
-  budgetSpent: number;
-  budgetTotal: number;
-  budgetUsedPct: number;
-}) {
-  return (
-    <section className="detail-section" aria-label="Live counters">
-      <span className="section-eyebrow">Live counters</span>
-      <h2>Surfaced → accepted → redeemed.</h2>
-      <p className="lead">Polls /merchants/{MERCHANT_ID}/summary every 2s.</p>
-      <div className="counter-grid">
-        <Counter label="Surfaced" value={String(surfaced)} detail="nearby high-intent wallets" />
-        <Counter label="Accepted" value={String(accepted)} detail="saved to wallet" />
-        <Counter label="Redeemed" value={String(redeemed)} detail="QR scanned at counter" />
-        <Counter
-          label="Budget left"
-          value={euro(remaining)}
-          detail={`${euro(budgetSpent)} of ${euro(budgetTotal)}`}
+    <span className="burndown" role="img" aria-label={`${value} of ${goal} redeemed`}>
+      <svg viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r={r} className="burndown-bg" />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          className="burndown-pace"
+          strokeDasharray={`${paceDash} ${c}`}
+          transform="rotate(-90 40 40)"
         />
-      </div>
-      <div className="counter-budget-bar" aria-label={`${budgetUsedPct}% budget used`}>
-        <span style={{ width: `${budgetUsedPct}%` }} />
-      </div>
-    </section>
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          className="burndown-actual"
+          strokeDasharray={`${dash} ${c}`}
+          transform="rotate(-90 40 40)"
+        />
+      </svg>
+      <span className="burndown-center">
+        <strong>{value}</strong>
+        <small>/{goal}</small>
+      </span>
+    </span>
   );
 }
 
-function Counter({ label, value, detail }: { label: string; value: string; detail: string }) {
-  const previous = useRef(value);
-  const [pulseKey, setPulseKey] = useState(0);
+function expectedPaceFraction() {
+  // Pace baseline assumes goal targets close-of-day; show how far through the
+  // window we are between 09:00 and 18:00.
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const start = 9 * 60;
+  const end = 18 * 60;
+  return Math.max(0, Math.min(1, (minutes - start) / (end - start)));
+}
+
+function useExpiresIn(expiresAt: string) {
+  const [ms, setMs] = useState(() => parseExpires(expiresAt) - Date.now());
   useEffect(() => {
-    if (previous.current !== value) {
-      previous.current = value;
-      setPulseKey((k) => k + 1);
-    }
-  }, [value]);
-  return (
-    <article className="counter">
-      <span className="label">{label}</span>
-      <strong key={pulseKey}>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  );
+    const id = setInterval(() => setMs(parseExpires(expiresAt) - Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+  return ms;
 }
 
-function MatchedRule() {
-  return (
-    <div className="matched-rule" aria-label="Matched autopilot rule">
-      <div>
-        <span className="label">Matched rule</span>
-        <code>{approvalRule.rule_id}</code>
-      </div>
-      <ul className="conditions">
-        {approvalRule.conditions.map((condition: string) => (
-          <li key={condition}>{condition}</li>
-        ))}
-      </ul>
-    </div>
-  );
+function parseExpires(expiresAt: string): number {
+  const parsed = Date.parse(expiresAt);
+  if (!Number.isNaN(parsed)) return parsed;
+  // Fallback: treat as local "HH:MM" on today.
+  const m = expiresAt.match(/(\d{1,2}):(\d{2})/);
+  if (m) {
+    const d = new Date();
+    d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+    return d.getTime();
+  }
+  return Date.now() + 60 * 60 * 1000;
+}
+
+function isFiringNow(expiresAt: string): boolean {
+  // Anything explicitly tagged for a previous day in the seed is historical.
+  if (/yesterday|wed|thu|fri/i.test(expiresAt)) return false;
+  const ms = parseExpires(expiresAt) - Date.now();
+  return ms > 0 && ms < 24 * 60 * 60 * 1000;
+}
+
+function formatCountdown(ms: number): string {
+  const totalMin = Math.floor(ms / 60_000);
+  if (totalMin >= 60) {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return `expires in ${h}h ${m}m`;
+  }
+  return `expires in ${totalMin}m`;
 }
