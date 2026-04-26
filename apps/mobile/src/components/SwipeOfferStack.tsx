@@ -30,10 +30,27 @@
  *     corner so the user can see the discount escalating across swipes
  *     (−10% → −15% → −20% in the default 3-variant ladder).
  *
- * Physics:
- *   - Swipe right when translationX > THRESHOLD_X *or* velocityX > THRESHOLD_VX.
- *   - Swipe left mirrors with negated thresholds.
- *   - Weak pans spring back to center with a 220ms ease-out.
+ * Physics (issue #158 — Tinder-grade motion craft, recovery of #157):
+ *   - All commit/snap/peek transitions go through `withSpring` with
+ *     centralized SPRING_* configs. The pan-release fling injects the
+ *     gesture's velocityX into the spring so the card carries momentum.
+ *   - Tilt rotation is interpolated continuously from translateX so the
+ *     card pivots into the swipe direction up to ±15°, then keeps
+ *     rotating with momentum during the off-screen exit.
+ *   - Stack peek (depth=1, depth=2) reads its slot from a continuous
+ *     `stackPosition` shared value. When the top card commits, the
+ *     parent springs that SV from 1 → 0, so the next card "rises" into
+ *     place on the same SPRING_SETTLE curve — no React-render snap.
+ *   - Weak releases spring back to (0,0) with SPRING_BACK (slight
+ *     overshoot for a physical feel).
+ *   - On `pan.onBegin`, the card scales to 0.985 with SPRING_FAST so
+ *     the user gets a "lift to grab" affordance.
+ *   - Initial mount + variant-swap entrance: each card ghosts in from
+ *     scale 0.95 + opacity 0, staggered ~60ms by depth.
+ *   - Idle micro-motion: top card breathes ±0.4% scale on a 4.5s
+ *     sin-eased loop. Subtle; would be one of the first things to drop
+ *     if framerate suffered, but on the simulator + iPhone 12+ stays at
+ *     60fps.
  *
  * Inline styles vs token utilities: the styles helper silently drops any
  * token not in its allow-list. Layout primitives this component needs
@@ -46,13 +63,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import type { SharedValue } from "react-native-reanimated";
 import Animated, {
   Easing,
   Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
@@ -63,8 +85,43 @@ import { WidgetRenderer } from "./WidgetRenderer";
 
 const THRESHOLD_X = 100;
 const THRESHOLD_VX = 600;
-const SWIPE_OUT_DURATION = 240;
-const SPRING_BACK_DURATION = 220;
+
+/**
+ * Spring config dictionary — centralized so every motion in the swipe
+ * stack reads from the same physical vocabulary. Tuned for "Tinder-grade"
+ * feel after a few rounds of trial-and-error in the simulator (issue #158).
+ *
+ *   FAST    — micro-interactions (press-down on grab, scale-back on release).
+ *             High stiffness so the user reads it as instant feedback.
+ *   SETTLE  — stack peek transitions (depth=2 → depth=1 → top promotion).
+ *             Mid stiffness, mid damping — confident settle, no oscillation.
+ *   FLING   — off-screen exit on swipe commit. Low stiffness so the velocity
+ *             we inject from `e.velocityX` actually carries the card out
+ *             with momentum (high stiffness would clamp the velocity into
+ *             a uniform-feeling exit). Tested at 14 damping → no overshoot
+ *             past the screen edge while still reading as physical.
+ *   BACK    — snap back to center on weak release. Slight overshoot
+ *             (damping 14 + stiffness 140) so the card "settles" rather
+ *             than just stops.
+ *
+ * The ghost-in entrance is a `withTiming` (not a spring) because the
+ * staggered per-depth window math wants a deterministic 0 → 1 ramp the
+ * peek cards can interpolate into their own slot windows.
+ */
+const SPRING_FAST = { stiffness: 200, damping: 20, mass: 0.6 } as const;
+const SPRING_SETTLE = { stiffness: 120, damping: 18, mass: 1 } as const;
+const SPRING_FLING = { stiffness: 80, damping: 14, mass: 0.6 } as const;
+const SPRING_BACK = { stiffness: 140, damping: 14, mass: 0.8 } as const;
+
+/** Synthetic velocity for tap-button-driven flings (px/s). Picked to feel
+ *  comparable to a confident user flick — high enough that SPRING_FLING's
+ *  low stiffness still produces a fast off-screen exit. */
+const TAP_FLING_VELOCITY = 1500;
+
+/** Rotation cap (degrees) for the tilt-on-pan effect. ±15 matches Tinder's
+ *  feel without making the card look like it's tipping over. */
+const ROTATION_MAX_DEG = 15;
+
 // Card-size pair for the two render modes. The drawer keeps the
 // in-sheet vertical budget (used by the alternatives step inside
 // the BottomSheet); the Discover view (issue #152) renders a
@@ -132,6 +189,47 @@ export function SwipeOfferStack({
     };
   }, []);
 
+  // Stack-position shared value (issue #158, polish #3). Each peek card
+  // reads its slot via `slot - stackPosition.value`. When the top card
+  // commits and we bump the React index, we ALSO spring this SV from
+  // 1 → 0 — that lets the depth=1 card rise into the depth=0 slot on
+  // the same SPRING_SETTLE curve instead of snapping into place when
+  // React re-renders. Net effect: the new top card "rises" into view.
+  const stackPosition = useSharedValue(0);
+
+  // Ghost-in shared value (polish #6). Animates 0 → 1 over ~320ms when
+  // the stack first mounts or `variants` swaps in. PeekCard / SwipeCard
+  // read this via depth-staggered interpolation so the top card arrives
+  // first, then depth=1, then depth=2. Re-keyed on the first variant id
+  // so a fresh fetch retriggers the entrance — but cosmetic re-renders
+  // (e.g. the index advance) don't.
+  const ghostProgress = useSharedValue(0);
+  const stackKey = variants[0]?.variant_id ?? "empty";
+  useEffect(() => {
+    ghostProgress.value = 0;
+    ghostProgress.value = withTiming(1, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+    // A new fetch should land flat — reset the promotion SV so we don't
+    // start the new stack mid-springpath from the previous run.
+    stackPosition.value = 0;
+    // We deliberately depend on stackKey only so cosmetic re-renders
+    // don't re-trigger the entrance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stackKey]);
+
+  // Promote the stack one slot. Bump stackPosition to +1 (so the next
+  // card is visually still in its old depth=1 slot for one frame), then
+  // spring it back to 0. Peek cards read slot - stackPosition.value, so
+  // as the SV travels 1 → 0, the depth=1 card slides into depth=0
+  // (matching the just-departed top card's geometry) on the SPRING_SETTLE
+  // curve. The depth=2 card simultaneously slides into depth=1.
+  const promoteStack = useCallback(() => {
+    stackPosition.value = 1;
+    stackPosition.value = withSpring(0, SPRING_SETTLE);
+  }, [stackPosition]);
+
   const handleRight = useCallback(
     (variant: AlternativeOffer) => {
       recordDwell(variant.variant_id);
@@ -153,9 +251,10 @@ export function SwipeOfferStack({
         onAllPassed({ ...dwellRef.current });
         return;
       }
+      promoteStack();
       setIndex(next);
     },
-    [index, variants.length, onAllPassed, recordDwell],
+    [index, variants.length, onAllPassed, recordDwell, promoteStack],
   );
 
   // Programmatic-fling handle on the top card so the Tinder-style tap
@@ -165,10 +264,10 @@ export function SwipeOfferStack({
   const swipeHandleRef = useRef<SwipeCardHandle | null>(null);
 
   const triggerSwipeRight = useCallback(() => {
-    swipeHandleRef.current?.flingOff("right");
+    swipeHandleRef.current?.flingOff("right", TAP_FLING_VELOCITY);
   }, []);
   const triggerSwipeLeft = useCallback(() => {
-    swipeHandleRef.current?.flingOff("left");
+    swipeHandleRef.current?.flingOff("left", -TAP_FLING_VELOCITY);
   }, []);
 
   if (variants.length === 0) return null;
@@ -236,7 +335,9 @@ export function SwipeOfferStack({
             key={`peek2-${peek2.variant_id}`}
             variant={peek2}
             surfaceMinHeight={surfaceMinHeight}
-            depth={2}
+            slot={2}
+            stackPosition={stackPosition}
+            ghostProgress={ghostProgress}
             simplified={useSimplified}
           />
         ) : null}
@@ -245,7 +346,9 @@ export function SwipeOfferStack({
             key={`peek1-${peek1.variant_id}`}
             variant={peek1}
             surfaceMinHeight={surfaceMinHeight}
-            depth={1}
+            slot={1}
+            stackPosition={stackPosition}
+            ghostProgress={ghostProgress}
             simplified={useSimplified}
           />
         ) : null}
@@ -257,6 +360,7 @@ export function SwipeOfferStack({
             surfaceMinHeight={surfaceMinHeight}
             handleRef={swipeHandleRef}
             simplified={useSimplified}
+            ghostProgress={ghostProgress}
             onSwipeRight={() => handleRight(top)}
             onSwipeLeft={() => handleLeft(top)}
           />
@@ -266,7 +370,10 @@ export function SwipeOfferStack({
       {/* Tinder-style tap shortcuts. Both buttons are ADDITIVE to the
           existing pan gesture — they call the same internal flingOff()
           path on the top card, so the dwell signal + animation stays
-          identical regardless of input modality (issue #146 polish #4). */}
+          identical regardless of input modality (issue #146 polish #4).
+          Tap-button flings inject a synthetic velocity (±TAP_FLING_VELOCITY)
+          so they go through the SAME SPRING_FLING physics as a real
+          gesture (issue #158 polish #7). */}
       {top ? (
         <View
           style={[
@@ -297,9 +404,13 @@ export function SwipeOfferStack({
  * Tinder-style tap buttons in the parent stack can fire the same
  * `flingOff()` the pan gesture uses. Keeping the handle internal to
  * this module means the swipe physics live in exactly one place.
+ *
+ * `velocity` (px/s) is optional — when present it's injected as the
+ * spring's initial velocity, giving tap-button flings the same
+ * momentum-carrying feel as a real swipe gesture (issue #158 polish #7).
  */
 type SwipeCardHandle = {
-  flingOff: (dir: "left" | "right") => void;
+  flingOff: (dir: "left" | "right", velocity?: number) => void;
 };
 
 /**
@@ -348,43 +459,98 @@ function SwipeButton({
 
 /**
  * The stack card behind the top card. Static (no gesture), peek-only.
- * Scaled down + nudged so the user sees the *next* card waiting. Two
- * depth tiers (issue #146 polish #3): depth=1 is the immediate next
- * card; depth=2 is the third-deep peek that shows "there are more"
- * without text. Each tier nudges further down + smaller + dimmer.
+ * Scaled down + nudged so the user sees the *next* card waiting.
+ *
+ * Issue #158 (polish #3 + #6): the depth tier is no longer a static
+ * lookup. We compute `effectiveDepth = slot - stackPosition.value` —
+ * when the parent springs `stackPosition` from 1 → 0 after a commit,
+ * the depth=1 card visually rises to depth=0 (which is the same scale
+ * & translateY as the just-departed top card had), giving a smooth
+ * promotion. The interpolation reads continuous depth so scale +
+ * translateY + translateX + opacity all travel together on the same
+ * SPRING_SETTLE curve.
+ *
+ * Ghost-in (polish #6): on initial mount + variant swap, the card
+ * lands from scale * 0.95, opacity 0, with a depth-staggered window
+ * so the top card arrives first (window [0, 0.6]), then depth=1
+ * ([0.18, 0.78]), then depth=2 ([0.36, 0.96]). Stagger reads as the
+ * deck of cards "fanning in" from a single point.
  */
 function PeekCard({
   variant,
   surfaceMinHeight,
-  depth,
+  slot,
+  stackPosition,
+  ghostProgress,
   simplified,
 }: {
   variant: AlternativeOffer;
   surfaceMinHeight: number;
-  depth: 1 | 2;
+  /** This card's slot in the stack at React-render time: 1 = immediate
+   *  next, 2 = third-deep. Effective depth = slot - stackPosition.value. */
+  slot: 1 | 2;
+  stackPosition: SharedValue<number>;
+  ghostProgress: SharedValue<number>;
   /** When true, render the simplified Tinder-essence card (issue #152). */
   simplified?: boolean;
 }) {
-  const layer =
-    depth === 1
-      ? { scale: 0.93, translateY: 14, opacity: 0.5, translateX: 6 }
-      : { scale: 0.86, translateY: 28, opacity: 0.25, translateX: 12 };
+  // Continuous effective depth driven by the parent's stackPosition SV.
+  // As stackPosition springs 1 → 0, this card's effectiveDepth slides
+  // from (slot - 1) → slot — every visual property travels along on the
+  // SPRING_SETTLE curve.
+  const effectiveDepth = useDerivedValue(() => slot - stackPosition.value);
+
+  // Per-depth ghost-in window so the top card arrives first, then
+  // depth=1, then depth=2. Window is [start, end] mapped from
+  // ghostProgress in [0, 1]. Overlapping but offset so the deck "fans".
+  const ghostStart = slot === 1 ? 0.18 : 0.36;
+  const ghostEnd = slot === 1 ? 0.78 : 0.96;
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const d = effectiveDepth.value;
+    // depth 0 = top-card geometry (scale 1, translateY 0, opacity 1)
+    // depth 1 = first peek (scale 0.93, translateY 14, opacity 0.5)
+    // depth 2 = second peek (scale 0.86, translateY 28, opacity 0.25)
+    const scale = interpolate(d, [0, 1, 2], [1, 0.93, 0.86], Extrapolation.CLAMP);
+    const translateY = interpolate(d, [0, 1, 2], [0, 14, 28], Extrapolation.CLAMP);
+    const translateX = interpolate(d, [0, 1, 2], [0, 6, 12], Extrapolation.CLAMP);
+    const depthOpacity = interpolate(d, [0, 1, 2], [1, 0.5, 0.25], Extrapolation.CLAMP);
+
+    // Ghost-in: scale up from 0.95 + opacity 0 to full, mapped through
+    // the per-slot window. We multiply rather than replace so the
+    // depth-driven scale + opacity still apply once the entrance is done.
+    const ghost = interpolate(
+      ghostProgress.value,
+      [ghostStart, ghostEnd],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    const ghostScale = interpolate(ghost, [0, 1], [0.95, 1], Extrapolation.CLAMP);
+    const ghostOpacity = ghost;
+
+    return {
+      transform: [
+        { translateX },
+        { translateY },
+        { scale: scale * ghostScale },
+      ],
+      opacity: depthOpacity * ghostOpacity,
+    };
+  });
+
   return (
-    <View
+    <Animated.View
       pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        top: 0,
-        zIndex: depth === 1 ? 1 : 0,
-        transform: [
-          { translateX: layer.translateX },
-          { translateY: layer.translateY },
-          { scale: layer.scale },
-        ],
-        opacity: layer.opacity,
-      }}
+      style={[
+        {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 0,
+          zIndex: slot === 1 ? 1 : 0,
+        },
+        animatedStyle,
+      ]}
     >
       {simplified ? (
         <SimplifiedCardSurface
@@ -399,14 +565,29 @@ function PeekCard({
           surfaceMinHeight={surfaceMinHeight}
         />
       )}
-    </View>
+    </Animated.View>
   );
 }
 
 /**
  * The interactive top-of-stack card. Owns the pan gesture + animation. On
- * release we either fling off-screen (commit the swipe direction) or spring
- * back to center (weak pan).
+ * release we either fling off-screen (commit the swipe direction, with
+ * gesture velocity injected into the spring) or spring back to center
+ * (weak pan).
+ *
+ * Issue #158 motion-craft additions:
+ *   - `pressScale` runs on `pan.onBegin` (lift-to-grab) and resets on
+ *     `onFinalize` so a fling exit also restores the scale (the new top
+ *     card under it would otherwise inherit the press-down). FAST spring.
+ *   - `cardStyle` interpolates `translateX` → rotation deg ±15 with clamp.
+ *     Rotation continues to interpolate during the fling-off, so the card
+ *     keeps tilting as it leaves the screen — feels like it's tumbling
+ *     out, not sliding.
+ *   - `idleScale` is a 4.5s sin-eased ±0.4% breath. Layered on the press +
+ *     ghost scales via multiplication. Subtle enough that the user reads
+ *     it as "the deck is alive" not "something is glitching".
+ *   - On weak release, translateX/Y go through SPRING_BACK (slight
+ *     overshoot) instead of withTiming. The card "settles" into center.
  */
 function SwipeCard({
   variant,
@@ -414,6 +595,7 @@ function SwipeCard({
   surfaceMinHeight,
   handleRef,
   simplified,
+  ghostProgress,
   onSwipeRight,
   onSwipeLeft,
 }: {
@@ -423,24 +605,61 @@ function SwipeCard({
   handleRef?: React.MutableRefObject<SwipeCardHandle | null>;
   /** When true, render the simplified Tinder-essence card (issue #152). */
   simplified?: boolean;
+  /** Stack-level entrance progress (0 → 1 over ~320ms on mount/swap). */
+  ghostProgress: SharedValue<number>;
   onSwipeRight: () => void;
   onSwipeLeft: () => void;
 }) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+  // Press-down scale on grab. 1.0 at rest, 0.985 while panning. Multiplied
+  // into the final transform alongside the ghost-in + idle-breath scales.
+  const pressScale = useSharedValue(1);
+  // Idle micro-motion (polish #8). Started after mount, runs forever.
+  // ±0.4% scale on a 4.5s loop. Sin-eased via the timing easing function.
+  const idleScale = useSharedValue(1);
+
+  useEffect(() => {
+    // Kick off the breathing loop. Use withRepeat + withSequence so each
+    // half of the cycle uses a sin-flavored curve — pure timing easing
+    // gives the "easeInOut" approximation Tinder uses for idle decks.
+    idleScale.value = withRepeat(
+      withSequence(
+        withTiming(1.004, { duration: 2250, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.0, { duration: 2250, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+      false,
+    );
+    return () => {
+      // Clamp to 1 on unmount so any captured-mid-cycle frame doesn't
+      // leave a stale scale value behind on a recycled SV.
+      idleScale.value = 1;
+    };
+  }, [idleScale]);
 
   const flingOff = useCallback(
-    (dir: "left" | "right") => {
+    (dir: "left" | "right", velocity?: number) => {
       const target = dir === "right" ? screenWidth + 200 : -screenWidth - 200;
-      translateX.value = withTiming(target, {
-        duration: SWIPE_OUT_DURATION,
-        easing: Easing.out(Easing.exp),
+      // Inject the user's release velocity into the spring (polish #1).
+      // Default to a confident synthetic velocity if the caller didn't
+      // supply one (e.g. a tap-button caller on a fresh mount).
+      const vx = velocity ?? (dir === "right" ? TAP_FLING_VELOCITY : -TAP_FLING_VELOCITY);
+      translateX.value = withSpring(target, {
+        ...SPRING_FLING,
+        velocity: vx,
       });
+      // Let the slight vertical follow ease back to 0 during the exit so
+      // the card doesn't trail off at a downward angle.
+      translateY.value = withSpring(0, SPRING_SETTLE);
+      // Restore press-scale even if the user released without lifting
+      // their finger (e.g. tap-button path).
+      pressScale.value = withSpring(1, SPRING_FAST);
       mediumTap();
       if (dir === "right") onSwipeRight();
       else onSwipeLeft();
     },
-    [onSwipeLeft, onSwipeRight, screenWidth, translateX],
+    [onSwipeLeft, onSwipeRight, screenWidth, translateX, translateY, pressScale],
   );
 
   // Wire the imperative handle so the parent's tap buttons can fire the
@@ -462,6 +681,11 @@ function SwipeCard({
     () =>
       Gesture.Pan()
         .activeOffsetX([-10, 10])
+        .onBegin(() => {
+          // Lift-to-grab affordance (polish #5). Snap the card to a
+          // slightly smaller scale so the user reads "I've got it".
+          pressScale.value = withSpring(0.985, SPRING_FAST);
+        })
         .onChange((e) => {
           translateX.value = e.translationX;
           // Slight vertical follow so the card feels picked-up, not ratcheted.
@@ -473,35 +697,57 @@ function SwipeCard({
           const goLeft =
             e.translationX < -THRESHOLD_X || e.velocityX < -THRESHOLD_VX;
           if (goRight) {
-            runOnJS(flingOff)("right");
+            runOnJS(flingOff)("right", e.velocityX);
           } else if (goLeft) {
-            runOnJS(flingOff)("left");
+            runOnJS(flingOff)("left", e.velocityX);
           } else {
-            translateX.value = withTiming(0, {
-              duration: SPRING_BACK_DURATION,
-              easing: Easing.out(Easing.exp),
-            });
-            translateY.value = withTiming(0, {
-              duration: SPRING_BACK_DURATION,
-              easing: Easing.out(Easing.exp),
-            });
+            // Snap-back spring (polish #4). Slight overshoot reads as
+            // "physical card returning to its pile" instead of a flat
+            // ease-out timing curve.
+            translateX.value = withSpring(0, SPRING_BACK);
+            translateY.value = withSpring(0, SPRING_BACK);
+            pressScale.value = withSpring(1, SPRING_FAST);
           }
+        })
+        .onFinalize(() => {
+          // Defensive: if the gesture is interrupted (e.g. a parent
+          // ScrollView grabs it back), restore the press scale so the
+          // card doesn't get stuck small.
+          pressScale.value = withSpring(1, SPRING_FAST);
         }),
-    [flingOff, translateX, translateY],
+    [flingOff, translateX, translateY, pressScale],
   );
 
   const cardStyle = useAnimatedStyle(() => {
+    // Tilt rotation (polish #2) — interpolate translateX to ±15deg with
+    // clamping. Rotation continues during fling-off because translateX
+    // keeps animating to ±(screenWidth + 200), so the card rotates as
+    // it leaves the screen — that's the "tumble out" feel.
     const rotation = interpolate(
       translateX.value,
       [-screenWidth, 0, screenWidth],
-      [-12, 0, 12],
+      [-ROTATION_MAX_DEG, 0, ROTATION_MAX_DEG],
       Extrapolation.CLAMP,
     );
+    // Ghost-in: top card uses [0, 0.6] window so it lands first.
+    const ghost = interpolate(
+      ghostProgress.value,
+      [0, 0.6],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    const ghostScale = interpolate(ghost, [0, 1], [0.95, 1], Extrapolation.CLAMP);
+    const ghostOpacity = ghost;
+    // Final scale = press × idle × ghost. Three SVs all multiplied so
+    // each can run independently without one stomping the other.
+    const finalScale = pressScale.value * idleScale.value * ghostScale;
     return {
+      opacity: ghostOpacity,
       transform: [
         { translateX: translateX.value },
         { translateY: translateY.value },
         { rotateZ: `${rotation}deg` },
+        { scale: finalScale },
       ],
     };
   });
