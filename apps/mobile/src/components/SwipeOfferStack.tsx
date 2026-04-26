@@ -65,36 +65,30 @@ const THRESHOLD_X = 100;
 const THRESHOLD_VX = 600;
 const SWIPE_OUT_DURATION = 240;
 const SPRING_BACK_DURATION = 220;
-// Card-size pair for the three render modes. The drawer keeps the
-// in-sheet vertical budget (legacy); the full-screen overlay (issue
-// #145, now removed) bumped the stack to ~520pt; the Discover view
-// (issue #152) renders a simplified Tinder-style card without the
-// dark cocoa block / CTA / 3-dot indicator and uses the largest
-// card height so the photo dominates the surface.
+// Card-size pair for the two render modes. The drawer keeps the
+// in-sheet vertical budget (used by the alternatives step inside
+// the BottomSheet); the Discover view (issue #152) renders a
+// simplified Tinder-style card without the dark cocoa block / CTA /
+// 3-dot indicator and uses a larger card height so the photo
+// dominates the surface.
 const STACK_MIN_HEIGHT_DRAWER = 460;
-const STACK_MIN_HEIGHT_FULLSCREEN = 540;
 const STACK_MIN_HEIGHT_DISCOVER = 540;
 const CARD_SURFACE_MIN_HEIGHT_DRAWER = 420;
-const CARD_SURFACE_MIN_HEIGHT_FULLSCREEN = 500;
 const CARD_SURFACE_MIN_HEIGHT_DISCOVER = 500;
 
 export type DwellByVariant = Record<string, number>;
 
 /** Render-size variant.
  *
- *   "drawer"     — legacy in-sheet sizing (used by the old wallet swipe
- *                  surface, kept around for the alternatives step until
- *                  Phase 5 removes the last consumer).
- *   "fullScreen" — legacy full-screen overlay sizing (issue #145,
- *                  removed in #152 — kept on the union for one phase
- *                  to avoid a flapping API; Phase 5 cleans it up).
- *   "discover"   — Discover view (issue #152). Same card height as
- *                  fullScreen but renders the SimplifiedCardSurface:
- *                  no dark cocoa block, no CTA, no eyebrow, no 3-dot
- *                  indicator — Tinder essence (photo + minimal
- *                  overlay text + discount badge + swipe).
+ *   "drawer"   — in-sheet sizing. Used by the alternatives step inside
+ *                the BottomSheet (merchant-tap-from-Browse-list flow)
+ *                so the swipe stack fits the sheet's 80% snap.
+ *   "discover" — Discover view (issue #152). Larger cards + the
+ *                SimplifiedCardSurface: no dark cocoa block, no CTA,
+ *                no eyebrow, no 3-dot indicator. Tinder essence
+ *                (photo + minimal overlay text + discount badge + swipe).
  */
-export type SwipeCardScale = "drawer" | "fullScreen" | "discover";
+export type SwipeCardScale = "drawer" | "discover";
 
 type Props = {
   variants: AlternativeOffer[];
@@ -102,10 +96,11 @@ type Props = {
   onSettle: (variant: AlternativeOffer, dwellMsByVariant: DwellByVariant) => void;
   /** Fired when every card has been swiped LEFT. */
   onAllPassed: (dwellMsByVariant: DwellByVariant) => void;
-  /** Issue #145 — render-size variant. Defaults to "drawer" so existing
-   *  call sites (silent-step wallet, alternatives step) keep their layout
-   *  unchanged. The full-screen overlay passes "fullScreen" to bump the
-   *  card height. Physics + dwell tracking are identical across modes. */
+  /** Render-size variant. Defaults to "drawer" so the in-sheet
+   *  alternatives step keeps its layout unchanged. DiscoverView (issue
+   *  #152) passes "discover" to bump the card height + swap in the
+   *  SimplifiedCardSurface. Physics + dwell tracking are identical
+   *  across modes. */
   cardScale?: SwipeCardScale;
 };
 
@@ -190,15 +185,11 @@ export function SwipeOfferStack({
   const stackMinHeight =
     cardScale === "discover"
       ? STACK_MIN_HEIGHT_DISCOVER
-      : cardScale === "fullScreen"
-        ? STACK_MIN_HEIGHT_FULLSCREEN
-        : STACK_MIN_HEIGHT_DRAWER;
+      : STACK_MIN_HEIGHT_DRAWER;
   const surfaceMinHeight =
     cardScale === "discover"
       ? CARD_SURFACE_MIN_HEIGHT_DISCOVER
-      : cardScale === "fullScreen"
-        ? CARD_SURFACE_MIN_HEIGHT_FULLSCREEN
-        : CARD_SURFACE_MIN_HEIGHT_DRAWER;
+      : CARD_SURFACE_MIN_HEIGHT_DRAWER;
   // Discover mode (#152) hides the 3-dot position indicator — the stack
   // peek already telegraphs "there are more cards" without the extra
   // dot row competing with the photo for visual weight.

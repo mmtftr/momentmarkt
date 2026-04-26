@@ -21,28 +21,42 @@ generative widgets, and a credible merchant surface win.
 
 ## 2. The user flow (definitive)
 
-We have three plausible entries — merchant-tap-triggered swipe (#132),
-lens-driven default swipe (#137), full-screen swipe (#145). Only one gets
-recorded. **The recording takes the lens-driven swipe path with a
-mid-flow expand into full-screen mode.** It wins because it is the only
-path that telegraphs "you control the algorithm" (lens chip tap), proves
-"the LLM has real work to do" (cross-merchant re-rank), and earns the
-cinematic Tinder beat (full-screen overlay) — three things the brief
-explicitly grades. The merchant-tap entry stays in the build as an
-alternate path the user has; the demo doesn't take it.
+The 2-view IA refactor (#152) collapsed the earlier three-entry
+landscape — merchant-tap-triggered swipe (#132), lens-driven swipe in
+the drawer (#137), full-screen swipe overlay (#145) — into two
+top-level views switched by a custom JS bottom navbar:
+
+- **Discover** (DEFAULT on app launch) — full-screen swipe surface
+  with lens chips at the top + Tinder heart/X buttons below the
+  stack. No map. No drawer. Solid cream background. The simplified
+  card (photo full-bleed + headline overlay + spark discount badge)
+  is the Tinder essence — no dark cocoa block, no bottom CTA, no
+  eyebrow, no dot indicator.
+- **Browse** — the existing wallet area: full-bleed Apple Map +
+  bottom drawer (search + merchant list + weather card) + top-LEFT
+  weather pill + top-RIGHT clock/gear icons. Drawer no longer carries
+  swipe or lens chips; the Browse navbar tab IS the "browse all"
+  surface.
+
+The recording takes Discover as the opening beat (DEFAULT lens "For
+you"), demonstrates the lens-chip mechanism switch + cross-merchant
+re-rank, then taps the Browse navbar tab to show the map + list +
+city-swap punchline. Merchant-tap-from-list inside Browse remains
+the canonical commit path (right-swipe inside Discover is "browse
+by swipe", commit is via Browse → tap → focused offer → redeem).
 
 | # | Beat | On screen | Gesture | Background work | Target |
 |---|---|---|---|---|---|
-| 1 | **Silent open** | Full-bleed Apple Map of Berlin Mitte. Frosted "Berlin · 16° · Mitte" pill top-LEFT. Gear + clock SF Symbols top-RIGHT. Drawer at 25 % showing lens chip row + search bar + first swipe card peeking. | None — hold 4 s | `useSignals('berlin')` is live (Open-Meteo). | 4 s |
-| 2 | **Drag drawer to 80 %** | Lens chips visible (For you active). Swipe card at full size, second card stacked behind. List link demoted under the stack. | Drag handle up | Map dims behind sheet via `animatedIndex`. | 3 s |
-| 3 | **Tap "Best deals" lens** | Stack cross-fades; new top card has the steepest discount in the city. Active chip flips spark orange. | Tap lens chip | `POST /offers/alternatives { lens: "best_deals" }`. Pure deterministic sort, no LLM — visible to the judge that lenses change mechanism, not just order. | 4 s |
-| 4 | **Tap "For you" — swipe right on top card** | Cocoa card (rainHero widget preview) flies right with confetti shimmer. Next card snaps forward. | Tap chip + right-swipe | `swipeHistory` appends; backend's preference agent re-ranks the next pull cross-merchant. | 5 s |
-| 5 | **Swipe-up the stack into full-screen** | Stack lifts into `SwipeFullScreenOverlay`. Map dims to 70 % black. Cards rendered at ~520 pt. Lens chips persist at top. | Swipe up the card | Same `variants` + `lens` + `swipeHistory` — overlay is a different render of the same data. | 4 s |
-| 6 | **Right-swipe Cafe Bondi in full-screen** | Card flies right; overlay slides down; App routes to `step="offer"`. | Right-swipe | `setSettledVariant`; close overlay. | 4 s |
+| 1 | **Silent open — Discover** | Full-screen cream surface, "MomentMarkt · Discover" eyebrow + title at top-left, lens chip row (For you active), large Tinder-style swipe card with photo full-bleed + spark discount pill top-right + headline overlay + subhead. Heart/X buttons under the stack. BottomNavBar at the bottom (Discover tab active). | None — hold 4 s | `fetchOfferAlternatives({ lens: "for_you", city: "berlin" })` lands the variant pool. | 4 s |
+| 2 | **Tap "Best deals" lens** | Stack cross-fades; new top card has the steepest discount in the city. Active chip flips spark orange. | Tap lens chip | `POST /offers/alternatives { lens: "best_deals" }`. Pure deterministic sort, no LLM — judge sees lenses change mechanism, not just order. | 4 s |
+| 3 | **Tap "For you" — swipe right on top card** | Card flies right; next card snaps forward; subhead under the new headline reads as a fresh tone+emotion line. | Tap chip + right-swipe | `swipeHistory` appends; backend's preference agent re-ranks the next pull cross-merchant. | 5 s |
+| 4 | **Tap Browse in the navbar** | 250ms cross-fade; map + drawer fade in; Discover view fades out. Top-LEFT frosted weather pill ("Berlin · 16° · Mitte") + clock + gear icons appear top-RIGHT. Drawer at 25% showing brand chip + search bar + first merchant cards. | Tap navbar | `viewMode = "browse"`. No fetch — list was already fetching in the background. | 3 s |
+| 5 | **Drag drawer to 80% + tap Cafe Bondi** | Drawer expands to 80%; merchant list visible. Tap the top merchant card with an active offer. | Drag handle up + tap card | `handleMerchantTap` → `POST /offers/alternatives { merchant_id }`. | 4 s |
+| 6 | **Alternatives swipe stack inside drawer** | Drawer reveals the focused-overlay alternatives stack with three escalating-discount cards. Right-swipe on the keeper. | Right-swipe | `step="alternatives"` → `setSettledVariant` → `step="offer"`. | 4 s |
 | 7 | **Focused offer view (GenUI)** | Drawer pivots into the rainHero widget — six RN primitives composed from the LLM-emitted JSON spec. Walk-time chip, single CTA. | None — let it land | `WidgetRenderer` validates the spec; falls back to known-good if validation fails. | 5 s |
 | 8 | **Redeem → QR → simulated girocard tap** | QR with intent token → success screen, confetti, `+€1,85 (12 %)` count-up in German format. | Tap "Redeem" → tap "Simulate girocard tap" | `POST /redeem` persists; merchant counters tick. | 9 s |
-| 9 | **Tap weather pill — fly to Zurich** | Map animates to Zürich HB. Pill flips to "Zurich · 22° · HB". Catalog reloads. Currency flips to CHF. | Tap pill | `setCity('zurich')` → fresh `/merchants/zurich` + `/signals/zurich`. | 8 s |
-| 10 | **Hold on Zurich silent** | Same wallet, new city. | None — hold 2 s | — | 2 s |
+| 9 | **Tap weather pill — fly to Zurich** | Map animates to Zürich HB. Pill flips to "Zurich · 22° · HB". Catalog reloads. Currency flips to CHF. | Tap pill | `setCity('zurich')` → fresh `/merchants/zurich` + `/signals/zurich`; `swipeHistory` resets per DESIGN_PRINCIPLES.md #8. | 8 s |
+| 10 | **Hold on Zurich silent** | Same wallet, new city. Optional: tap Discover navbar tab to show the swipe surface picked up the new city's catalog. | None — hold 2 s | — | 2 s |
 
 Total: ~48 s. Leaves headroom for the merchant cutaway (Section 3, beat
 inserted between 8 and 9 if time allows — see Section 7).
@@ -96,15 +110,18 @@ when they want, never write a coupon."*
 
 | Capability | Shipped? | In recording? |
 |---|---|---|
-| Lens chips (For you / Best deals / Right now / Nearby) | YES | YES — Beat 3 + 4. The "you control the algorithm" beat. |
-| Cross-merchant swipe + preference re-rank | YES | YES — Beat 4. The "Tinder for offers" mechanic. |
-| Full-screen swipe overlay (#145) | YES | YES — Beat 5. The cinematic Tinder moment. |
+| 2-view IA (Discover default + Browse) via custom JS BottomNavBar (#152) | YES | YES — Beats 1 + 4. The "two surfaces, you pick" framing. |
+| Discover view: full-screen swipe + lens chips + Tinder card simplification | YES | YES — Beats 1–3. Tinder essence on screen 1. |
+| Lens chips (For you / Best deals / Right now / Nearby) | YES | YES — Beats 1 + 2. The "you control the algorithm" beat. |
+| Cross-merchant swipe + preference re-rank | YES | YES — Beat 3. The "Tinder for offers" mechanic. |
+| Browse view: map + drawer + merchant list (`MerchantSearchList`) | YES | YES — Beats 4 + 5. The unfiltered ground truth. |
+| Merchant-tap-from-list → focused alternatives stack (#132) | YES | YES — Beats 5 + 6. The commit path. |
 | GenUI widget (rainHero JSON spec → 6 RN primitives) | YES | YES — Beat 7. |
 | Simulated girocard checkout + cashback | YES | YES — Beat 8. |
 | Berlin ↔ Zurich live config swap | YES | YES — Beat 9. The "this is generative" punchline. |
 | Merchant 6-section dashboard (#144) | YES | BRIEF cutaway — Today section only, ≤10 s, optional between Beat 8 and 9. |
 | Negotiation Agent module (#142) | YES (module + tests; not wired) | NO. Voiceover-only mention as v2 evidence. |
-| List view (`MerchantSearchList`) | YES | NO direct shot. Mentioned in voiceover as the unfiltered ground truth. |
+| Full-screen swipe overlay (#145) | REMOVED in #152 | NO. Discover view is full-screen by default; the overlay became redundant. |
 | Persistent swipe history (#148) | NO | NO. Voiceover roadmap line ("paired with on-device SLM"). |
 | High-intent dev-panel toggle | YES | NO in demo cut. Belongs to the tech video. |
 
@@ -118,7 +135,7 @@ when they want, never write a coupon."*
 | UX — Where does interaction happen? | In-app card inside the wallet drawer (demo); push notification (production swap, on architecture slide). |
 | UX — Factual or emotional address? | Both — headline "Es regnet bald. 80 m bis zum heißen Kakao." is emotional-situational; walk-time chip is factual. |
 | UX — First 3 seconds | Beat 1 — full-bleed map + frosted weather pill + drawer pre-loaded with the offer. No scrolling, no deliberation. |
-| UX — How does the offer end? | Acceptance (Beat 8 success), dismissal (left-swipe in stack), expiry (drawer collapse to silent). All three feel intentional. |
+| UX — How does the offer end? | Acceptance (Beat 8 success), dismissal (left-swipe in stack), expiry (tap navbar back to Discover or Browse silent). All three feel intentional. |
 
 ## 6. The 3 things that win us the prize
 
@@ -164,11 +181,11 @@ data source should slot in as a configuration, not a rewrite.' One tap."*
    easiest to verify visually (judge sees the steepest % first) and
    reinforces the "LLM is one of several mechanisms" point. Right now
    is more conceptually interesting but harder to read in 4 seconds.
-3. **Full-screen overlay — record or skip?** Recommendation: **record
-   it** (Beat 5). It's the cinematic moment that distinguishes us from
-   every coupon-app-shaped competitor and it's already shipped (#145).
-   Skipping it costs us the "Tinder for offers" frame. Doruk's call if
-   the overlay slide-in flickers on the demo machine.
+3. ~~**Full-screen overlay — record or skip?**~~ Resolved by the #152
+   2-view IA refactor. Discover view is full-screen by default — the
+   overlay was made redundant and the file was deleted. The
+   cinematic Tinder beat now lives in Beats 1–3, no extra gesture
+   needed.
 4. **Voiceover language — German or English?** Recommendation:
    **English**, German headline kept on screen. Hack-Nation judges are
    international; the German copy on the widget does the cultural

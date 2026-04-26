@@ -17,13 +17,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import {
-  type AlternativeOffer,
-  type MerchantListItem,
-  type PriorSwipe,
-} from "../lib/api";
+import { type MerchantListItem } from "../lib/api";
 import { s } from "../styles";
-import type { LensKey } from "./LensChips";
 import { MerchantSearchList } from "./MerchantSearchList";
 
 type Props = {
@@ -64,20 +59,6 @@ type Props = {
    * into a fully-revealed list. Issue #125.
    */
   onSearchFocus?: () => void;
-  /** @deprecated post-#152 the swipe stack moved to DiscoverView. Kept on
-   *  the prop API for one phase so App.tsx compiles while Phase 4 strips
-   *  the obsolete plumbing. */
-  swipeHistory?: PriorSwipe[];
-  /** @deprecated post-#152 — see `swipeHistory` above. */
-  onAppendSwipeHistory?: (entries: PriorSwipe[]) => void;
-  /** @deprecated post-#152 — lens lives at DiscoverView now. */
-  lens?: LensKey;
-  /** @deprecated post-#152 — lens lives at DiscoverView now. */
-  onLensChange?: (lens: LensKey) => void;
-  /** @deprecated post-#152 — full-screen overlay was removed. */
-  onSwipeStateChange?: (state: WalletSwipeState) => void;
-  /** @deprecated post-#152 — full-screen overlay was removed. */
-  onExpand?: () => void;
 };
 
 /**
@@ -259,19 +240,3 @@ export function WalletSheetContent({
   );
 }
 
-/**
- * Legacy snapshot type — pre-#152 the drawer's swipe surface lifted its
- * variants/lens/loading state up to App.tsx so the SwipeFullScreenOverlay
- * could render the same data. Post-#152 the drawer is browse-only and
- * the swipe stack lives in DiscoverView, but App.tsx still imports this
- * type during the migration. Shape preserved for one phase so App.tsx
- * still compiles; Phase 4 strips both the type and the lifted state.
- *
- * @deprecated remove after Phase 4 of #152.
- */
-export type WalletSwipeState = {
-  variants: AlternativeOffer[] | null;
-  loading: boolean;
-  lens: LensKey;
-  stackKey: number;
-};

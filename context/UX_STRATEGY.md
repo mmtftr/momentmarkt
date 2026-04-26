@@ -8,7 +8,7 @@ from `work/SPEC.md` and `README.md`. Sits alongside `context/DESIGN_PRINCIPLES.m
 
 ## The four surfaces
 
-The wallet now ships four genuine surfaces, each with a distinct role:
+The wallet ships four genuine surfaces, each with a distinct role:
 
 | Surface     | Component             | Role                                         |
 | ----------- | --------------------- | -------------------------------------------- |
@@ -20,6 +20,36 @@ The wallet now ships four genuine surfaces, each with a distinct role:
 These are not redundant. The map answers *where*; the drawer is the *vessel*
 that holds saved value; the list is *unfiltered ground truth*; the swipe is
 *active curation*. Removing any one collapses a real user need.
+
+## The 2-view IA grouping (issue #152)
+
+The four surfaces above are still all live; they're now regrouped into
+two top-level views switched by a custom JS bottom navbar
+(`BottomNavBar`):
+
+| View       | Surfaces it contains                          | Role                              |
+| ---------- | --------------------------------------------- | --------------------------------- |
+| Discover   | Swipe stack + lens chips                      | The active-curation home          |
+| Browse     | Map + drawer + list (+ search) + weather card | The verification + commit surface |
+
+Discover is the DEFAULT app launch surface — full-screen swipe with
+the lens chip row at the top + Tinder heart/X buttons under the
+stack. No map, no drawer wrapper. The simplified card (issue #152)
+strips the dark cocoa block, the bottom CTA, the eyebrow, and the
+3-dot indicator so the photo + headline + discount badge dominate
+(Tinder essence).
+
+Browse is the existing wallet area: full-bleed Apple Map + cream
+bottom drawer + the top-of-map weather pill / clock / gear icons.
+The drawer no longer carries swipe or lens chips — those moved to
+Discover. Tap a merchant card in the list → focused alternatives
+swipe stack → focused offer view → simulated girocard tap. This is
+the canonical commit path.
+
+The `SwipeFullScreenOverlay` (issue #145) was made redundant by the
+2-view IA — Discover view is full-screen by default — and the file
+was deleted in the same refactor. The four-surface framing above
+still applies; only the *grouping* changed.
 
 ## Three framings of "what is the app FOR"
 
