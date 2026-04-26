@@ -8,14 +8,14 @@
  *
  * Layout (top → bottom):
  *   - Safe-area top inset
- *   - LensChips row (For you / Best deals / Right now / Nearby)
+ *   - Distance control (250 m / 500 m / 1 km)
  *   - SwipeOfferStack (cardScale="discover" — Tinder-essence card)
  *   - Tinder heart/X buttons (live inside SwipeOfferStack — Doruk
  *     approved keeping them as explicit alternatives to swipe gestures)
  *   - (BottomNavBar renders as a sibling at App.tsx, not inside this view)
  *
  * State ownership:
- *   - The lens + swipeHistory + variants pool live at App.tsx (lifted
+ *   - The swipeHistory + variants pool live at App.tsx / this view boundary
  *     so view switching preserves session state — flip to Browse,
  *     flip back, the lens + cards survive).
  *   - This component is a controlled surface: it just renders whatever
@@ -29,13 +29,13 @@
  *     view, not via a "Browse all" link inside the swipe surface
  *     (the link was the old drawer-mode escape hatch; the Browse
  *     navbar tab is the new one and reads as more discoverable).
- *   - "Nearby" stays the deterministic escape (#4) — the lens chip
- *     row is the user-visible mechanism switch.
+ *   - Distance is the user-visible control; internal ranking lenses stay
+ *     out of the demo UI.
  *   - The swipe never *removes* merchants from the catalog (#1).
  */
 
 import { SymbolView } from "expo-symbols";
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -51,7 +51,7 @@ import {
   type PriorSwipe,
 } from "../lib/api";
 import { s } from "../styles";
-import { LensChips, type LensKey } from "./LensChips";
+import type { LensKey } from "./LensChips";
 import { SwipeOfferStack, type DwellByVariant } from "./SwipeOfferStack";
 import { SwipeStackSkeleton } from "./SwipeStackSkeleton";
 
@@ -59,8 +59,8 @@ type Props = {
   /** Backend city slug (e.g. "berlin", "zurich"). Drives the
    *  /offers/alternatives request. */
   citySlug: string;
-  /** Active lens — controlled by App.tsx so flipping to Browse and back
-   *  preserves the user's choice. */
+  /** Legacy curation lens prop. Discover now keeps this internal and exposes
+   *  distance as the user-facing control instead. */
   lens: LensKey;
   onLensChange: (lens: LensKey) => void;
   /** Accumulated cross-session swipe history. Threaded into the For-you
@@ -104,10 +104,18 @@ type Props = {
   onResetSeenVariants?: () => void;
 };
 
+type DistanceRadius = 250 | 500 | 1000;
+
+const DISTANCE_FILTERS: readonly { radius: DistanceRadius; label: string }[] = [
+  { radius: 250, label: "250 m" },
+  { radius: 500, label: "500 m" },
+  { radius: 1000, label: "1 km" },
+] as const;
+
 export function DiscoverView({
   citySlug,
-  lens,
-  onLensChange,
+  lens: _legacyLens,
+  onLensChange: _onLegacyLensChange,
   swipeHistory,
   onAppendSwipeHistory,
   onSavePass,
@@ -119,6 +127,7 @@ export function DiscoverView({
 }: Props): ReactElement {
   const insets = useSafeAreaInsets();
   const [variants, setVariants] = useState<AlternativeOffer[] | null>(null);
+  const [distanceRadius, setDistanceRadius] = useState<DistanceRadius>(500);
   const [loading, setLoading] = useState(false);
   // Re-mount key so flipping the lens / completing a round resets
   // SwipeOfferStack's internal index without a stale top-card peek.
@@ -174,13 +183,10 @@ export function DiscoverView({
     const history = swipeHistoryRef.current;
     const seenIds = seenVariantIdsRef.current;
     fetchOfferAlternatives({
-      lens,
+      lens: "for_you",
       city: citySlug,
-      // For-you is the only lens the backend feeds with preference
-      // context; pass it only on that lens to keep the request body
-      // honest about what's actually consumed.
-      preferenceContext:
-        lens === "for_you" && history.length > 0 ? history : undefined,
+      n: 12,
+      preferenceContext: history.length > 0 ? history : undefined,
       // Issue #177 — rotation contract. Forward the running seen-set
       // so the backend filters the candidate pool BEFORE picking this
       // round. Without this, every re-fetch returned the same top-3
@@ -214,7 +220,7 @@ export function DiscoverView({
       });
 
     return () => ctrl.abort();
-  }, [citySlug, lens, fetchToken]);
+  }, [citySlug, fetchToken]);
 
   // Dwell-aware history-append helpers. Mirrors the old
   // WalletSheetContent (#137) logic so the For-you re-rank keeps
@@ -293,12 +299,17 @@ export function DiscoverView({
     setFetchToken((t) => t + 1);
   }, [onResetSeenVariants]);
 
+  const filteredVariants = useMemo(
+    () => filterVariantsByDistance(variants, distanceRadius),
+    [variants, distanceRadius],
+  );
+
   return (
     <View style={[...s("flex-1 bg-cream"), { paddingTop: insets.top + 10 }]}>
       {/* Sticky header (issue #171) — title pinned at the top of the
           wrapper, OUTSIDE the swipe stack body, so it shares the
           identical upper-header rhythm with Settings / Wallet / History.
-          The lens chips also live above the swipe surface and don't
+          The distance control also lives above the swipe surface and doesn't
           scroll out (SwipeOfferStack is a fixed-position card stack, not
           a ScrollView), so the whole top region is effectively sticky
           by construction. */}
@@ -318,7 +329,7 @@ export function DiscoverView({
         </Text>
       </View>
       <View style={[...s("px-5"), { paddingBottom: 8 }]}>
-        <LensChips active={lens} onChange={onLensChange} />
+        <DistanceControl active={distanceRadius} onChange={setDistanceRadius} />
       </View>
 
       {/* Swipe stack body. Fills remaining vertical space; the heart/X
@@ -339,9 +350,9 @@ export function DiscoverView({
       >
         <DiscoverBody
           loading={loading}
-          variants={variants}
+          variants={filteredVariants}
           stackKey={stackKey}
-          lens={lens}
+          distanceRadius={distanceRadius}
           onSettle={handleSettle}
           onAllPassed={handleAllPassed}
           // Issue #175 — per-card-consume signal forwarded down to
@@ -351,7 +362,7 @@ export function DiscoverView({
           onCardConsumed={onCardConsumed}
           // Issue #177 — render-state inputs for the new exhausted end
           // state. `exhausted=true + variants=[]` triggers the rotation
-          // copy ("You've seen everything") with Refresh + lens-switch
+          // copy ("You've seen everything") with Refresh
           // CTAs; `exhausted=false + variants=[]` keeps the simpler
           // "No X picks right now" copy.
           exhausted={exhausted}
@@ -375,7 +386,7 @@ function DiscoverBody({
   loading,
   variants,
   stackKey,
-  lens,
+  distanceRadius,
   onSettle,
   onAllPassed,
   onCardConsumed,
@@ -386,7 +397,7 @@ function DiscoverBody({
   loading: boolean;
   variants: AlternativeOffer[] | null;
   stackKey: number;
-  lens: LensKey;
+  distanceRadius: DistanceRadius;
   onSettle: (variant: AlternativeOffer, dwellByVariant: DwellByVariant) => void;
   onAllPassed: (dwellByVariant: DwellByVariant) => void;
   /** Issue #175 — per-swipe consumed signal forwarded to SwipeOfferStack. */
@@ -394,8 +405,7 @@ function DiscoverBody({
   /** Issue #177 — true when the backend signalled the seen-set covers
    *  the entire candidate pool. Only flips the empty-state copy. */
   exhausted: boolean;
-  /** Issue #177 — passed through so the exhausted end state can show
-   *  "all offers in {lens} for {city} today." */
+  /** Issue #177 — passed through so the exhausted end state can show city copy. */
   citySlug: string;
   /** Issue #177 — Refresh CTA on the exhausted end state. */
   onRefresh: () => void;
@@ -445,7 +455,7 @@ function DiscoverBody({
         >
           {hasVariants ? (
             <SwipeOfferStack
-              key={`discover-${lens}-${stackKey}`}
+              key={`discover-${distanceRadius}-${stackKey}`}
               variants={variants ?? []}
               onSettle={onSettle}
               onAllPassed={onAllPassed}
@@ -458,12 +468,11 @@ function DiscoverBody({
             // this is the moment we stop pretending and tell them so,
             // with a Refresh affordance and a hint to switch lenses.
             <DiscoverExhaustedState
-              lens={lens}
               citySlug={citySlug}
               onRefresh={onRefresh}
             />
           ) : (
-            <DiscoverEmptyState lens={lens} loading={loading} />
+            <DiscoverEmptyState distanceRadius={distanceRadius} loading={loading} />
           )}
         </Animated.View>
       ) : null}
@@ -484,11 +493,9 @@ function DiscoverBody({
  * implementation details, just the user-facing outcome.
  */
 function DiscoverExhaustedState({
-  lens,
   citySlug,
   onRefresh,
 }: {
-  lens: LensKey;
   citySlug: string;
   onRefresh: () => void;
 }): ReactElement {
@@ -512,37 +519,14 @@ function DiscoverExhaustedState({
           { letterSpacing: -0.4 },
         ]}
       >
-        You&rsquo;ve seen everything
+        You've seen everything
       </Text>
       <Text style={s("mt-2 text-sm text-cocoa text-center")}>
-        All offers in <Text style={s("font-bold")}>{lensLabel(lens)}</Text> for{" "}
-        <Text style={s("font-bold")}>{cityDisplayName(citySlug)}</Text> today.
-        Try another lens above, or refresh to start over.
+        You've seen today's curated offers for{" "}
+        <Text style={s("font-bold")}>{cityDisplayName(citySlug)}</Text>. Refresh
+        to start over.
       </Text>
-      <View style={[...s("mt-6 flex-row"), { gap: 12 }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Try another lens"
-          // Tap-target is the lens chip row at the top of Discover; the
-          // button itself is a hint, not a separate action. We let the
-          // user keep their finger near the bottom of the screen
-          // (where the swipe stack normally lives) so this still feels
-          // like a forward path even when no card is on screen.
-          onPress={onRefresh}
-          style={({ pressed }) => [
-            ...s("rounded-full items-center justify-center"),
-            {
-              width: 140,
-              height: 44,
-              backgroundColor: "rgba(23, 18, 15, 0.06)",
-              borderWidth: 1,
-              borderColor: "rgba(23, 18, 15, 0.12)",
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}
-        >
-          <Text style={s("text-sm font-bold text-ink")}>Try another lens</Text>
-        </Pressable>
+      <View style={[...s("mt-6 flex-row"), { gap: 12 }]}> 
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Refresh and start over"
@@ -583,10 +567,10 @@ function cityDisplayName(slug: string): string {
 }
 
 function DiscoverEmptyState({
-  lens,
+  distanceRadius,
   loading,
 }: {
-  lens: LensKey;
+  distanceRadius: DistanceRadius;
   loading: boolean;
 }): ReactElement {
   return (
@@ -604,26 +588,72 @@ function DiscoverEmptyState({
         style={{ width: 36, height: 36 }}
       />
       <Text style={s("mt-4 text-base font-black text-ink text-center")}>
-        {loading ? "Loading picks…" : `No ${lensLabel(lens)} picks right now`}
+        {loading ? "Loading picks…" : `No picks within ${formatRadius(distanceRadius)}`}
       </Text>
       <Text style={s("mt-2 text-sm text-neutral-600 text-center")}>
         {loading
           ? "Hang tight — the curation agent is thinking."
-          : "Try another lens above, or switch to Browse to see the full list."}
+          : "Widen the distance above, or switch to Browse to see the full list."}
       </Text>
     </View>
   );
 }
 
-function lensLabel(lens: LensKey): string {
-  switch (lens) {
-    case "for_you":
-      return "For you";
-    case "best_deals":
-      return "Best deals";
-    case "right_now":
-      return "Right now";
-    case "nearby":
-      return "Nearby";
-  }
+function DistanceControl({
+  active,
+  onChange,
+}: {
+  active: DistanceRadius;
+  onChange: (radius: DistanceRadius) => void;
+}): ReactElement {
+  return (
+    <View style={s("rounded-full bg-white flex-row p-1")}>
+      {DISTANCE_FILTERS.map((filter) => {
+        const selected = filter.radius === active;
+        return (
+          <Pressable
+            key={filter.radius}
+            accessibilityRole="button"
+            accessibilityLabel={`Show offers within ${filter.label}`}
+            accessibilityState={{ selected }}
+            onPress={() => onChange(filter.radius)}
+            style={({ pressed }) => [
+              ...s("flex-1 rounded-full items-center justify-center"),
+              {
+                height: 34,
+                backgroundColor: selected ? "#17120f" : "transparent",
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: selected ? "#fff8ee" : "#6f3f2c",
+                fontSize: 13,
+                fontWeight: selected ? "900" : "800",
+                letterSpacing: 0.2,
+              }}
+            >
+              {filter.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function filterVariantsByDistance(
+  variants: AlternativeOffer[] | null,
+  radius: DistanceRadius,
+): AlternativeOffer[] | null {
+  if (!variants) return variants;
+  return variants.filter(
+    (variant) =>
+      typeof variant.distance_m !== "number" || variant.distance_m <= radius,
+  );
+}
+
+function formatRadius(radius: DistanceRadius): string {
+  return radius >= 1000 ? `${radius / 1000} km` : `${radius} m`;
 }

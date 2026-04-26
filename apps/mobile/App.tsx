@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -235,6 +235,7 @@ export default function App() {
   // offer→redeeming→success state machine.
   const [merchantDetail, setMerchantDetail] =
     useState<MerchantListItem | null>(null);
+  const [focusedMapPinId, setFocusedMapPinId] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -369,7 +370,8 @@ export default function App() {
       setSavedPasses((prev) => prev.filter((p) => p.id !== redeemingPassId));
       setRedeemingPassId(null);
     }
-    setStep("success");
+    setSettledVariant(null);
+    setStep("silent");
   }, [redeemingPassId]);
 
   const handleResetToSilent = useCallback(() => {
@@ -404,17 +406,11 @@ export default function App() {
       setSavedPasses((prev) => prev.filter((p) => p.id !== pass.id));
       return;
     }
-    // Mirror the merchant-tap path: settle on the variant, jump to
-    // step="offer" so SheetBody renders the focused widget. The user
-    // then taps the widget CTA → step="redeeming" → step="success" →
-    // handleRedeemComplete pops the pass.
+    // Wallet owns checkout. Keep the user in the Wallet context while the
+    // saved offer opens its focused card, then QR, then success.
     setSettledVariant(pass.variant);
     setRedeemingPassId(pass.id);
-    // The redeem flow lives inside the Browse view's BottomSheet (the
-    // existing focused-offer surface). Flip to Browse so the sheet is
-    // visible while step !== "silent". The navbar auto-hides per
-    // showNavBar = step === "silent".
-    setViewMode("browse");
+    setViewMode("wallet");
     setStep("offer");
   }, []);
 
@@ -427,27 +423,23 @@ export default function App() {
     (merchant: MerchantListItem) => {
       lightTap();
       setMerchantDetail(merchant);
+      setFocusedMapPinId(merchant.id);
     },
     [],
   );
   const handleCloseMerchantDetail = useCallback(() => {
     setMerchantDetail(null);
   }, []);
-  // "Redeem now" inside the detail view → close the detail + route into
-  // the existing offer→redeeming→success state machine. Setting
-  // settledVariant=null + step="offer" makes SheetBody render the
-  // focused OfferStack with the canonical demo widget. The merchant's
-  // discount headline shows on the detail view itself; the focused
-  // offer widget is the commit surface that owns the QR + cashback
-  // choreography. (#174 cleanup: the in-drawer alternatives swipe
-  // stack — Discover's deal-flow path — used to live alongside this
-  // and was removed; Discover stays the single deal-swipe surface.)
+  // "Redeem now" inside the detail view is already the commit action.
+  // Route straight to QR instead of showing the generic offer widget with
+  // a second "Claim it" CTA; Discover remains the browse/deal-comparison
+  // surface, while merchant detail is a direct redemption path.
   const handleRedeemFromMerchantDetail = useCallback(
     (_merchant: MerchantListItem) => {
       setMerchantDetail(null);
       setSettledVariant(null);
-      setViewMode("browse");
-      setStep("offer");
+      setViewMode("wallet");
+      setStep("redeeming");
     },
     [],
   );
@@ -458,6 +450,15 @@ export default function App() {
   const handleGoToDiscoverFromDetail = useCallback(() => {
     setMerchantDetail(null);
     setViewMode("discover");
+  }, []);
+
+  const handleShowMerchantOnMap = useCallback((merchant: MerchantListItem) => {
+    setMerchantDetail(null);
+    setFocusedMapPinId(merchant.id);
+    setViewMode("browse");
+    requestAnimationFrame(() => {
+      sheetRef.current?.snapToIndex(0);
+    });
   }, []);
 
   // Issue #156 phase 4 / #175 — fired by DiscoverView whenever a fresh
@@ -685,6 +686,7 @@ export default function App() {
           centerLat={cityProfile.mapCenter.lat}
           centerLng={cityProfile.mapCenter.lng}
           pins={mapPins}
+          focusedPinId={focusedMapPinId}
           interactive={mapInteractive}
           style={StyleSheet.absoluteFill}
           onOfferPress={() => setStep("offer")}
@@ -991,6 +993,7 @@ export default function App() {
           merchant={merchantDetail}
           onClose={handleCloseMerchantDetail}
           onRedeem={handleRedeemFromMerchantDetail}
+          onShowOnMap={handleShowMerchantOnMap}
           onGoToDiscover={handleGoToDiscoverFromDetail}
         />
 
@@ -1007,12 +1010,13 @@ export default function App() {
             step === "redeeming" ||
             step === "success"
           }
+          showHeader={step !== "redeeming"}
           onClose={handleResetToSilent}
         >
           {step === "offer" || step === "surfacing" ? (
             settledVariant ? (
-              <View style={[...s("flex-1 px-5 py-6")]}> 
-                <View style={[...s("mb-3 rounded-2xl bg-spark px-4 py-3")]}> 
+              <View style={s("flex-1 px-5 py-6")}>
+                <View style={s("mb-3 rounded-2xl bg-spark px-4 py-3")}>
                   <View style={s("flex-row items-center justify-between")}>
                     <Text
                       style={s(
@@ -1047,11 +1051,8 @@ export default function App() {
                     {`${settledVariant.discount_label} · ${settledVariant.headline}`}
                   </Text>
                 </View>
-                <WidgetRenderer
-                  node={withoutDuplicateDiscountBadge(
-                    settledVariant.widget_spec,
-                    settledVariant.discount_label,
-                  )}
+                <FocusedSavedOffer
+                  variant={settledVariant}
                   onRedeem={handleAdvanceFromOffer}
                 />
               </View>
@@ -1136,10 +1137,9 @@ function MapIconButton({
   );
 }
 
-/** Static info-only weather pill for the map's top-LEFT corner (issue #119).
- *  Matches MapIconButton's frosted-glass look so the LEFT pill + RIGHT icon
- *  cluster read as one visual family. No onPress — DevPanel is reachable
- *  only through Settings → Demo & Debug now.
+/** Static info-only weather pill for the map's top edge (issue #119).
+ *  Uses the app's cream surface instead of frosted white so the city switcher
+ *  feels like MomentMarkt chrome, not a generic map control.
  *  Issue #120: emoji glyph replaced by a typed SF Symbol via expo-symbols
  *  so the pill renders a crisp vector icon instead of an OS-dependent emoji. */
 function MapWeatherPill({
@@ -1173,7 +1173,7 @@ function MapWeatherPill({
       style={({ pressed }: { pressed?: boolean } = {}) => [
         ...s("rounded-full flex-row items-center gap-2 pl-3 pr-4"),
         {
-          backgroundColor: "rgba(255, 255, 255, 0.88)",
+          backgroundColor: "#fff8ee",
           borderWidth: 1,
           borderColor: "rgba(23, 18, 15, 0.12)",
           height: 44,
@@ -1362,6 +1362,110 @@ function OfferStack({
   );
 }
 
+function FocusedSavedOffer({
+  variant,
+  onRedeem,
+}: {
+  variant: AlternativeOffer;
+  onRedeem: () => void;
+}) {
+  const imageUrl = extractWidgetImageUrl(variant.widget_spec);
+  const distanceLabel =
+    typeof variant.distance_m === "number"
+      ? `${Math.max(1, Math.round(variant.distance_m))} m away`
+      : null;
+
+  return (
+    <View style={s("flex-1")}>
+      <View
+        style={[
+          ...s("rounded-[34px] bg-white overflow-hidden"),
+          {
+            borderWidth: 1,
+            borderColor: "rgba(23, 18, 15, 0.08)",
+            shadowColor: "#17120f",
+            shadowOpacity: 0.08,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+          },
+        ]}
+      >
+        <View
+          style={{
+            width: "100%",
+            height: 260,
+            backgroundColor: "rgba(23, 18, 15, 0.06)",
+          }}
+        >
+          {imageUrl ? (
+            <Image
+              source={{ uri: imageUrl }}
+              accessibilityLabel={`${variant.merchant_display_name} offer photo`}
+              resizeMode="cover"
+              style={{ width: "100%", height: "100%" }}
+            />
+          ) : (
+            <View style={s("flex-1 bg-cocoa items-center justify-center")}>
+              <SymbolView
+                name="sparkles"
+                tintColor="rgba(255, 248, 238, 0.7)"
+                size={36}
+                weight="medium"
+                style={{ width: 36, height: 36 }}
+              />
+            </View>
+          )}
+        </View>
+
+        <View style={s("p-6")}>
+          <View style={s("flex-row items-center justify-between gap-3")}>
+            <Text
+              style={[
+                ...s("text-xs font-bold uppercase tracking-[2px] text-cocoa"),
+                { flex: 1 },
+              ]}
+              numberOfLines={1}
+            >
+              {variant.merchant_display_name}
+            </Text>
+            <View style={s("rounded-full bg-spark px-3 py-2")}>
+              <Text style={s("text-xs font-black uppercase tracking-[2px] text-white")}>
+                {variant.discount_label}
+              </Text>
+            </View>
+          </View>
+          <Text
+            style={[
+              ...s("mt-4 text-3xl font-black text-ink"),
+              { lineHeight: 36, letterSpacing: -0.5 },
+            ]}
+          >
+            {variant.headline}
+          </Text>
+          {distanceLabel ? (
+            <Text style={s("mt-3 text-base text-neutral-600")}>{distanceLabel}</Text>
+          ) : null}
+        </View>
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Redeem saved offer"
+        onPress={() => {
+          lightTap();
+          onRedeem();
+        }}
+        style={({ pressed }) => [
+          ...s("mt-4 rounded-2xl bg-spark px-5 py-4"),
+          { opacity: pressed ? 0.75 : 1 },
+        ]}
+      >
+        <Text style={s("text-center text-base font-black text-white")}>Redeem now</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function VariantButton({
   active,
   label,
@@ -1492,40 +1596,23 @@ function DevPanelOverlay({
   );
 }
 
-function withoutDuplicateDiscountBadge(node: unknown, discountLabel: string): unknown {
-  if (!discountLabel || !isWidgetObject(node)) return node;
-  if (Array.isArray(node.children)) {
-    return {
-      ...node,
-      children: node.children
-        .filter((child) => !isDiscountBadgeNode(child, discountLabel))
-        .map((child) => withoutDuplicateDiscountBadge(child, discountLabel)),
-    };
+function extractWidgetImageUrl(node: unknown): string | null {
+  if (!isWidgetObject(node)) return null;
+  if (node.type === "Image" && typeof node.source === "string") {
+    return node.source;
   }
-  return node;
-}
-
-function isDiscountBadgeNode(node: unknown, discountLabel: string): boolean {
-  return (
-    isWidgetObject(node) &&
-    node.type === "View" &&
-    Array.isArray(node.children) &&
-    node.children.some((child) => hasExactText(child, discountLabel))
-  );
-}
-
-function hasExactText(node: unknown, text: string): boolean {
-  if (!isWidgetObject(node)) return false;
-  if (node.type === "Text" && node.text === text) return true;
-  return Array.isArray(node.children)
-    ? node.children.some((child) => hasExactText(child, text))
-    : false;
+  if (!Array.isArray(node.children)) return null;
+  for (const child of node.children) {
+    const imageUrl = extractWidgetImageUrl(child);
+    if (imageUrl) return imageUrl;
+  }
+  return null;
 }
 
 function isWidgetObject(value: unknown): value is Record<string, unknown> & {
   children?: unknown[];
   type?: unknown;
-  text?: unknown;
+  source?: unknown;
 } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

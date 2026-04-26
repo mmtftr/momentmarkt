@@ -675,6 +675,7 @@ export type FetchOfferAlternativesOptions = {
   merchantId?: string;
   lens?: LensKey;
   city?: string;
+  n?: number;
   preferenceContext?: PriorSwipe[];
   /**
    * Issue #177 — running set of variant_ids the user has already
@@ -705,13 +706,14 @@ export async function fetchOfferAlternatives(
     merchantId,
     lens,
     city,
+    n,
     preferenceContext,
     seenVariantIds,
     signal,
   } = options;
   try {
     const body: Record<string, unknown> = {
-      n: 3,
+      n: typeof n === "number" ? Math.max(1, Math.round(n)) : 3,
       // Live LLM is the default per the brief's "what makes a strong
       // submission" rubric — running fixture mode would land us in the
       // weak-submission column ("static dummy offers with no real

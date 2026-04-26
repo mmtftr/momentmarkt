@@ -95,6 +95,7 @@ type Props = {
    * by default; safe to omit when the screen does not need to react.
    */
   onOfferPress?: (pinId: string) => void;
+  focusedPinId?: string | null;
 };
 
 // Inline brand color (styles.ts does not export the palette).
@@ -150,6 +151,7 @@ export function CityMap({
   showCompass = false,
   style,
   onOfferPress,
+  focusedPinId,
 }: Props): JSX.Element {
   const resolvedPins = pins ?? DEFAULT_BERLIN_PINS;
 
@@ -173,6 +175,21 @@ export function CityMap({
     // delta values are constant and shouldn't re-trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerLat, centerLng]);
+
+  useEffect(() => {
+    if (!focusedPinId) return;
+    const focused = resolvedPins.find((pin) => pin.id === focusedPinId);
+    if (!focused) return;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: focused.lat,
+        longitude: focused.lng,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.006,
+      },
+      450,
+    );
+  }, [focusedPinId, resolvedPins]);
 
   const wrapperStyle: StyleProp<ViewStyle> = style
     ? [{ overflow: "hidden" }, style]
@@ -202,7 +219,12 @@ export function CityMap({
         toolbarEnabled={false}
       >
         {resolvedPins.map((pin) => (
-          <MerchantMarker key={pin.id} pin={pin} onOfferPress={onOfferPress} />
+          <MerchantMarker
+            key={pin.id}
+            pin={pin}
+            focused={pin.id === focusedPinId}
+            onOfferPress={onOfferPress}
+          />
         ))}
       </MapView>
     </View>
@@ -221,9 +243,11 @@ export function CityMap({
  */
 function MerchantMarker({
   pin,
+  focused = false,
   onOfferPress,
 }: {
   pin: CityMapPin;
+  focused?: boolean;
   onOfferPress?: (pinId: string) => void;
 }): JSX.Element {
   const isHighlighted = Boolean(pin.highlighted);
@@ -253,7 +277,13 @@ function MerchantMarker({
         <HighlightedMerchantMarker icon={icon} />
       ) : (
         <View style={markerStyles.bubbleWrap}>
-          <View style={[markerStyles.normal, hasOffer ? markerStyles.normalWithOffer : null]}>
+          <View
+            style={[
+              markerStyles.normal,
+              hasOffer ? markerStyles.normalWithOffer : null,
+              focused ? markerStyles.focused : null,
+            ]}
+          >
             {/* SF Symbol glyph rendered in cocoa/rain/spark tint so the
                 pin reads as a native Apple Maps category chip. */}
             <SymbolView
@@ -430,6 +460,11 @@ const markerStyles = StyleSheet.create({
     borderColor: SPARK_RED,
     shadowOpacity: 0.24,
     shadowRadius: 4,
+  },
+  focused: {
+    borderWidth: 2,
+    borderColor: SPARK_RED,
+    transform: [{ scale: 1.14 }],
   },
   normalSymbol: {
     width: 18,

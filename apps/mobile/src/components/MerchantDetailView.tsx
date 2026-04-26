@@ -67,6 +67,9 @@ type Props = {
    * widget specs in here.
    */
   onRedeem: (merchant: MerchantListItem) => void;
+  /** Fired when the user taps "View on map". App.tsx closes detail and
+   * focuses the merchant pin in Browse. */
+  onShowOnMap: (merchant: MerchantListItem) => void;
   /**
    * Fired when the user taps "Open Discover" on the no-offer
    * placeholder card. App.tsx flips `viewMode` to "discover".
@@ -123,6 +126,7 @@ export function MerchantDetailView({
   merchant,
   onClose,
   onRedeem,
+  onShowOnMap,
   onGoToDiscover,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -379,8 +383,11 @@ export function MerchantDetailView({
             <RowSeparator />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="View on map (coming soon)"
-              onPress={() => lightTap()}
+              accessibilityLabel="View merchant on map"
+              onPress={() => {
+                lightTap();
+                onShowOnMap(m);
+              }}
               style={({ pressed }) => [
                 ...s("flex-row items-center justify-between px-4"),
                 {

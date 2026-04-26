@@ -44,6 +44,8 @@ import { s } from "../styles";
 type Props = {
   /** True when the demo step is offer/surfacing/redeeming/success. */
   visible: boolean;
+  /** Hide chrome when the child screen already owns its own header. */
+  showHeader?: boolean;
   /** Fired by chevron-back + swipe-down. App.tsx wires this to
    *  `handleResetToSilent` so step → silent and the overlay slides out. */
   onClose: () => void;
@@ -51,7 +53,7 @@ type Props = {
   children: ReactNode;
 };
 
-export function RedeemOverlay({ visible, onClose, children }: Props) {
+export function RedeemOverlay({ visible, showHeader = true, onClose, children }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
 
@@ -141,45 +143,46 @@ export function RedeemOverlay({ visible, onClose, children }: Props) {
         ]}
         pointerEvents="auto"
       >
-        {/* Header: chevron-back top-left, matches Settings/History pattern. */}
-        <View
-          style={[
-            ...s("flex-row items-center px-5"),
-            { paddingTop: 8, paddingBottom: 12, gap: 8 },
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to wallet"
-            onPress={onClose}
-            hitSlop={12}
-            style={({ pressed }) => [
-              ...s("flex-row items-center"),
-              {
-                opacity: pressed ? 0.55 : 1,
-                marginLeft: -6,
-                paddingVertical: 6,
-                paddingRight: 4,
-              },
-            ]}
-          >
-            <SymbolView
-              name="chevron.down"
-              tintColor="#f2542d"
-              size={22}
-              weight="semibold"
-              style={{ width: 22, height: 22 }}
-            />
-          </Pressable>
-          <Text
+        {showHeader ? (
+          <View
             style={[
-              ...s("text-xs font-bold uppercase tracking-[3px] text-cocoa"),
-              { letterSpacing: 3 },
+              ...s("flex-row items-center px-5"),
+              { paddingTop: 8, paddingBottom: 12, gap: 8 },
             ]}
           >
-            MomentMarkt
-          </Text>
-        </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to wallet"
+              onPress={onClose}
+              hitSlop={12}
+              style={({ pressed }) => [
+                ...s("flex-row items-center"),
+                {
+                  opacity: pressed ? 0.55 : 1,
+                  marginLeft: -6,
+                  paddingVertical: 6,
+                  paddingRight: 4,
+                },
+              ]}
+            >
+              <SymbolView
+                name="chevron.down"
+                tintColor="#f2542d"
+                size={22}
+                weight="semibold"
+                style={{ width: 22, height: 22 }}
+              />
+            </Pressable>
+            <Text
+              style={[
+                ...s("text-xs font-bold uppercase tracking-[3px] text-cocoa"),
+                { letterSpacing: 3 },
+              ]}
+            >
+              MomentMarkt
+            </Text>
+          </View>
+        ) : null}
 
         {/* Per-step content owned by App.tsx. */}
         <View style={s("flex-1")}>{children}</View>
