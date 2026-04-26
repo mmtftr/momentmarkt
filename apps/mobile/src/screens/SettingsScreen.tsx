@@ -124,7 +124,10 @@ export function SettingsScreen(props: Props): ReactElement | null {
         StyleSheet.absoluteFill,
         ...s("bg-cream"),
         overlayStyle,
-        { paddingTop: Math.max(insets.top, 12) },
+        // Issue #100: bumped to insets.top + 10 so the header clears the
+        // iOS status bar / Dynamic Island (matches BottomSheet topInset and
+        // the History overlay paddingTop in App.tsx).
+        { paddingTop: insets.top + 10 },
       ]}
       pointerEvents="auto"
     >
@@ -249,38 +252,239 @@ export function SettingsScreen(props: Props): ReactElement | null {
           </View>
         </GroupedSection>
 
-        {/* ── Demo & Debug (issue #80) ─────────────────────────────────
-            Full DevPanel rendered inline as a settings section. Lets the
-            engineering surface stay reachable from the gear icon even when
-            the contextual top chip + dev icon are hidden on non-silent
-            steps. The `onRunSurfacing` button needs to dismiss Settings so
-            the bottom-sheet animation can play; we wrap it here rather than
-            in App.tsx so the parent can pass a single source-of-truth
-            handler. */}
+        {/* ── Demo & Debug (issue #80, restyled #100) ──────────────────
+            Hand-rolled cream-styled rendering of the same engineering data
+            the standalone DevPanel overlay shows. The dark GitHub-palette
+            DevPanel still lives behind the wrench icon for the tech-video
+            cut; here in Settings we render the same signals/score/breakdown/
+            envelope/toggles/buttons as cream Settings rows so the section
+            blends into the rest of the cream Settings surface instead of
+            looking like a broken dark embed. */}
         {devPanelProps ? (
           <>
             <SectionHeader>Demo &amp; Debug</SectionHeader>
-            <View
-              style={[
-                ...s("rounded-2xl overflow-hidden"),
-                {
-                  borderWidth: 1,
-                  borderColor: "#30363d",
-                },
-              ]}
-            >
-              <DevPanel
-                {...devPanelProps}
-                visible={true}
-                onRunSurfacing={() => {
+
+            {/* Composite state + signals */}
+            <GroupedSection>
+              <View
+                style={[
+                  ...s("flex-row items-center justify-between px-4"),
+                  { paddingVertical: 14, minHeight: 56 },
+                ]}
+              >
+                <Text style={s("text-base text-ink")}>Composite state</Text>
+                <View
+                  style={[
+                    ...s("rounded-full"),
+                    {
+                      backgroundColor: "rgba(23, 18, 15, 0.06)",
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      maxWidth: "65%",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[...s("text-ink mono"), { fontSize: 11 }]}
+                    numberOfLines={1}
+                  >
+                    {devPanelProps.compositeState}
+                  </Text>
+                </View>
+              </View>
+              {devPanelProps.signals.map((sig) => (
+                <View key={sig.label}>
+                  <RowSeparator />
+                  <View
+                    style={[
+                      ...s("flex-row items-center justify-between px-4"),
+                      { paddingVertical: 12, minHeight: 48 },
+                    ]}
+                  >
+                    <Text style={[...s("text-ink mono"), { fontSize: 13 }]}>
+                      {sig.label}
+                    </Text>
+                    <Text
+                      style={[
+                        ...s("mono"),
+                        {
+                          fontSize: 13,
+                          color:
+                            sig.tone === "warning"
+                              ? "#f0883e"
+                              : sig.tone === "good"
+                                ? "#3fb950"
+                                : "#525252",
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {sig.value}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </GroupedSection>
+
+            {/* Surfacing score + breakdown */}
+            <SectionHeader>Surfacing score</SectionHeader>
+            <GroupedSection>
+              <ScoreRow
+                score={devPanelProps.score}
+                threshold={devPanelProps.threshold}
+              />
+              <RowSeparator />
+              <BreakdownRow
+                label="weather"
+                value={devPanelProps.breakdown.weather}
+              />
+              <RowSeparator />
+              <BreakdownRow
+                label="event"
+                value={devPanelProps.breakdown.event}
+              />
+              <RowSeparator />
+              <BreakdownRow
+                label="demand"
+                value={devPanelProps.breakdown.demand}
+              />
+              <RowSeparator />
+              <BreakdownRow
+                label="proximity"
+                value={devPanelProps.breakdown.proximity}
+              />
+              <RowSeparator />
+              <BreakdownRow
+                label="high_intent"
+                value={devPanelProps.breakdown.highIntent}
+                accent
+              />
+            </GroupedSection>
+
+            {/* Privacy envelope (only when toggle is on) */}
+            {showPrivacyEnvelope ? (
+              <>
+                <SectionHeader>Privacy envelope</SectionHeader>
+                <GroupedSection>
+                  <View
+                    style={[
+                      ...s("flex-row items-center justify-between px-4"),
+                      { paddingVertical: 14, minHeight: 56 },
+                    ]}
+                  >
+                    <View style={s("flex-row items-center")}>
+                      <SymbolView
+                        name="lock.fill"
+                        tintColor="#3fb950"
+                        size={12}
+                        weight="medium"
+                        style={{ width: 14, height: 14 }}
+                      />
+                      <Text
+                        style={[
+                          ...s("text-ink mono"),
+                          { fontSize: 12, marginLeft: 8 },
+                        ]}
+                      >
+                        {"{intent_token, h3_cell_r8}"}
+                      </Text>
+                    </View>
+                  </View>
+                  <RowSeparator />
+                  <InfoRow
+                    label="intent_token"
+                    value={devPanelProps.intentToken}
+                  />
+                  <RowSeparator />
+                  <InfoRow label="h3_cell_r8" value={devPanelProps.h3Cell} />
+                </GroupedSection>
+                <SectionFooter>
+                  Only this anonymous tuple ever leaves the device.
+                </SectionFooter>
+              </>
+            ) : null}
+
+            {/* High-intent boost + city + run-surfacing CTA */}
+            <SectionHeader>Engine controls</SectionHeader>
+            <GroupedSection>
+              <View
+                style={[
+                  ...s("flex-row items-center justify-between px-4"),
+                  { paddingVertical: 10, minHeight: 56 },
+                ]}
+              >
+                <View style={[{ flex: 1, paddingRight: 12 }]}>
+                  <Text style={s("text-base text-ink")}>High-intent boost</Text>
+                  <Text style={s("mt-1 text-xs text-neutral-600")}>
+                    Lowers threshold + aggressive headline
+                  </Text>
+                </View>
+                <Switch
+                  value={devPanelProps.highIntent}
+                  onValueChange={devPanelProps.onToggleHighIntent}
+                  trackColor={{ false: "#e5e5e5", true: "#f2542d" }}
+                  thumbColor={"#ffffff"}
+                  ios_backgroundColor="#e5e5e5"
+                />
+              </View>
+              <RowSeparator />
+              <View
+                style={[
+                  ...s("flex-row px-4"),
+                  { paddingVertical: 12, gap: 8 },
+                ]}
+              >
+                <LangSegment
+                  label="Berlin"
+                  active={devPanelProps.city === "berlin"}
+                  onPress={() => {
+                    if (devPanelProps.city !== "berlin") {
+                      devPanelProps.onSwapCity();
+                    }
+                  }}
+                />
+                <LangSegment
+                  label="Zurich"
+                  active={devPanelProps.city === "zurich"}
+                  onPress={() => {
+                    if (devPanelProps.city !== "zurich") {
+                      devPanelProps.onSwapCity();
+                    }
+                  }}
+                />
+              </View>
+              <RowSeparator />
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
                   onClose();
                   devPanelProps.onRunSurfacing();
                 }}
-              />
-            </View>
+                style={({ pressed }) => [
+                  ...s("flex-row items-center justify-between px-4"),
+                  {
+                    paddingVertical: 16,
+                    opacity: pressed ? 0.6 : 1,
+                    minHeight: 56,
+                  },
+                ]}
+              >
+                <Text style={s("text-base font-bold text-ink")}>
+                  Run surfacing agent
+                </Text>
+                <SymbolView
+                  name="chevron.right"
+                  tintColor="rgba(23, 18, 15, 0.3)"
+                  size={14}
+                  weight="medium"
+                  style={{ width: 14, height: 14 }}
+                />
+              </Pressable>
+            </GroupedSection>
             <SectionFooter>
-              Engineering sidecar inline. On non-silent steps the small wrench
-              button in the top-right is hidden — all the levers live here.
+              Same engineering data as the standalone dev panel — restyled
+              to match the rest of Settings. The dark dev panel still opens
+              from the wrench icon for the tech video.
             </SectionFooter>
           </>
         ) : null}
@@ -563,5 +767,109 @@ function LangSegment({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+/**
+ * Surfacing-score row (issue #100): label + numeric ratio + thin progress bar
+ * underneath. Cream Settings styling — no GitHub-dark chrome. The bar fill
+ * uses spark-red when above threshold, cocoa otherwise so the engineering
+ * meaning stays parseable at a glance.
+ */
+function ScoreRow({ score, threshold }: { score: number; threshold: number }) {
+  const ratio = threshold > 0 ? Math.min(1, score / threshold) : 0;
+  const willFire = score >= threshold;
+  return (
+    <View style={[...s("px-4"), { paddingVertical: 12 }]}>
+      <View
+        style={[
+          ...s("flex-row items-center justify-between"),
+          { marginBottom: 8 },
+        ]}
+      >
+        <Text style={s("text-base text-ink")}>Surfacing score</Text>
+        <Text
+          style={[
+            ...s("mono"),
+            { fontSize: 12, color: willFire ? "#3fb950" : "#525252" },
+          ]}
+        >
+          {score.toFixed(2)} / {threshold.toFixed(2)}
+          {willFire ? " — will fire" : " — silent"}
+        </Text>
+      </View>
+      <View
+        style={{
+          height: 6,
+          width: "100%",
+          borderRadius: 3,
+          backgroundColor: "rgba(23, 18, 15, 0.08)",
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            height: 6,
+            width: `${ratio * 100}%`,
+            backgroundColor: willFire ? "#f2542d" : "#6f3f2c",
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Single breakdown contribution: label left, monospace value right, thin
+ * spark-red bar beneath. Bar normalised against the 0.30 per-feature ceiling
+ * (mirrors DevPanel's BreakdownBar so the two surfaces stay legible
+ * side-by-side during demo cuts that flip between them).
+ */
+function BreakdownRow({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+}) {
+  const pct = Math.max(0, Math.min(1, value / 0.3));
+  return (
+    <View style={[...s("px-4"), { paddingVertical: 10 }]}>
+      <View
+        style={[
+          ...s("flex-row items-center justify-between"),
+          { marginBottom: 6 },
+        ]}
+      >
+        <Text style={[...s("text-ink mono"), { fontSize: 13 }]}>{label}</Text>
+        <Text
+          style={[
+            ...s("mono"),
+            { fontSize: 12, color: accent ? "#3fb950" : "#525252" },
+          ]}
+        >
+          {value.toFixed(2)}
+        </Text>
+      </View>
+      <View
+        style={{
+          height: 4,
+          width: "100%",
+          borderRadius: 2,
+          backgroundColor: "rgba(23, 18, 15, 0.06)",
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            height: 4,
+            width: `${pct * 100}%`,
+            backgroundColor: accent ? "#3fb950" : "#f2542d",
+          }}
+        />
+      </View>
+    </View>
   );
 }
