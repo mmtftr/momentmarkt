@@ -147,26 +147,42 @@ function BriefingCard({
   );
 }
 
-/* ── live demand curve (compact, with now-dot) ──────────────────────────── */
+/* ── live demand curve (compact, dot at end of live data) ──────────────── */
 
-const TYPICAL_CURVE: { t: number; d: number }[] = [
-  { t: 8, d: 22 }, { t: 9, d: 38 }, { t: 10, d: 56 }, { t: 11, d: 70 },
-  { t: 12, d: 84 }, { t: 13, d: 92 }, { t: 14, d: 78 }, { t: 15, d: 60 },
-  { t: 16, d: 52 }, { t: 17, d: 64 }, { t: 18, d: 70 }, { t: 19, d: 58 },
-  { t: 20, d: 36 }, { t: 21, d: 22 }, { t: 22, d: 14 },
-];
+type CurvePoint = { t: number; d: number };
 
-const LIVE_CURVE: { t: number; d: number }[] = [
-  { t: 8, d: 18 }, { t: 9, d: 30 }, { t: 10, d: 44 }, { t: 11, d: 50 },
-  { t: 12, d: 48 }, { t: 13, d: 42 }, { t: 14, d: 36 }, { t: 15, d: 32 },
-];
+function timeStrToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function localTimeStringToMinutes(iso: string): number {
+  // ISO with timezone offset like "2026-04-25T13:30:00+02:00" — slice the
+  // local hour:minute fields directly so wall-clock display stays stable
+  // regardless of the merchant's runtime timezone.
+  const m = iso.match(/T(\d{2}):(\d{2})/);
+  if (!m) return 0;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+const TYPICAL_CURVE: CurvePoint[] = (
+  merchant.typical_density_curve?.points ?? []
+).map((p) => ({ t: timeStrToMinutes(p.time), d: p.density }));
+
+const LIVE_CURVE: CurvePoint[] = (merchant.live_samples ?? []).map((s) => ({
+  t: localTimeStringToMinutes(s.time_local),
+  d: s.density,
+}));
 
 function TodayCurve({ poll }: { poll: MerchantPollState }) {
-  const now = useNowMinutes();
-  const liveAtNow = sampleCurve(LIVE_CURVE, now);
-  const typicalAtNow = sampleCurve(TYPICAL_CURVE, now);
-  const gap = typicalAtNow > 0 ? (liveAtNow - typicalAtNow) / typicalAtNow : 0;
   const live = Boolean(poll.stats && !poll.error);
+
+  const lastLive = LIVE_CURVE[LIVE_CURVE.length - 1];
+  const typicalAtLastLive = lastLive ? sampleCurve(TYPICAL_CURVE, lastLive.t) : 0;
+  const gap =
+    lastLive && typicalAtLastLive > 0
+      ? (lastLive.d - typicalAtLastLive) / typicalAtLastLive
+      : 0;
 
   const W = 480;
   const H = 150;
@@ -174,19 +190,29 @@ function TodayCurve({ poll }: { poll: MerchantPollState }) {
   const padR = 12;
   const padT = 12;
   const padB = 22;
-  const xMin = 8 * 60;
-  const xMax = 22 * 60;
-  const x = (m: number) => padL + ((m - xMin) / (xMax - xMin)) * (W - padL - padR);
+  const allMinutes = [
+    ...TYPICAL_CURVE.map((p) => p.t),
+    ...LIVE_CURVE.map((p) => p.t),
+  ];
+  const xMin = allMinutes.length ? Math.min(...allMinutes) : 8 * 60;
+  const xMax = allMinutes.length ? Math.max(...allMinutes) : 22 * 60;
+  const x = (m: number) =>
+    padL + ((m - xMin) / Math.max(1, xMax - xMin)) * (W - padL - padR);
   const y = (d: number) => padT + (1 - d / 100) * (H - padT - padB);
 
-  const typicalPath = TYPICAL_CURVE.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.t * 60).toFixed(1)} ${y(p.d).toFixed(1)}`).join(" ");
-  const typicalArea =
-    `M ${x(TYPICAL_CURVE[0].t * 60).toFixed(1)} ${(H - padB).toFixed(1)} ` +
-    TYPICAL_CURVE.map((p) => `L ${x(p.t * 60).toFixed(1)} ${y(p.d).toFixed(1)}`).join(" ") +
-    ` L ${x(TYPICAL_CURVE[TYPICAL_CURVE.length - 1].t * 60).toFixed(1)} ${(H - padB).toFixed(1)} Z`;
-  const livePath = LIVE_CURVE.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.t * 60).toFixed(1)} ${y(p.d).toFixed(1)}`).join(" ");
+  const typicalPath = TYPICAL_CURVE.map(
+    (p, i) => `${i === 0 ? "M" : "L"} ${x(p.t).toFixed(1)} ${y(p.d).toFixed(1)}`,
+  ).join(" ");
+  const typicalArea = TYPICAL_CURVE.length
+    ? `M ${x(TYPICAL_CURVE[0].t).toFixed(1)} ${(H - padB).toFixed(1)} ` +
+      TYPICAL_CURVE.map((p) => `L ${x(p.t).toFixed(1)} ${y(p.d).toFixed(1)}`).join(" ") +
+      ` L ${x(TYPICAL_CURVE[TYPICAL_CURVE.length - 1].t).toFixed(1)} ${(H - padB).toFixed(1)} Z`
+    : "";
+  const livePath = LIVE_CURVE.map(
+    (p, i) => `${i === 0 ? "M" : "L"} ${x(p.t).toFixed(1)} ${y(p.d).toFixed(1)}`,
+  ).join(" ");
 
-  const ticks = [9, 12, 15, 18, 21];
+  const ticks = hourTicksBetween(xMin, xMax);
 
   return (
     <article className="today-curve">
@@ -201,7 +227,8 @@ function TodayCurve({ poll }: { poll: MerchantPollState }) {
               : "Tracking typical"}
           </h2>
           <p className="lead">
-            {nowLabel(now)} · today's foot traffic vs your usual {todayWord().toLowerCase()}.
+            {lastLive ? `Latest sample ${minutesLabel(lastLive.t)} · ` : ""}
+            today's foot traffic vs your usual {todayWord().toLowerCase()}.
           </p>
         </div>
         <span className={`head-pill ${live ? "is-live" : "is-muted"}`}>
@@ -220,18 +247,17 @@ function TodayCurve({ poll }: { poll: MerchantPollState }) {
         <path d={typicalArea} className="ob-chart-baseline-area" />
         <path d={typicalPath} className="ob-chart-baseline-line" />
         <path d={livePath} className="ob-chart-live-line" />
-        <circle
-          cx={x(now)}
-          cy={y(liveAtNow)}
-          r={5}
-          className="today-curve-dot"
-        />
-        <circle
-          cx={x(now)}
-          cy={y(liveAtNow)}
-          r={5}
-          className="today-curve-dot-pulse"
-        />
+        {lastLive ? (
+          <>
+            <circle cx={x(lastLive.t)} cy={y(lastLive.d)} r={5} className="today-curve-dot" />
+            <circle
+              cx={x(lastLive.t)}
+              cy={y(lastLive.d)}
+              r={5}
+              className="today-curve-dot-pulse"
+            />
+          </>
+        ) : null}
       </svg>
       <div className="today-curve-legend">
         <span className="ob-chart-legend-item">
@@ -245,42 +271,34 @@ function TodayCurve({ poll }: { poll: MerchantPollState }) {
   );
 }
 
-function sampleCurve(curve: { t: number; d: number }[], minutes: number): number {
-  const hours = minutes / 60;
-  if (hours <= curve[0].t) return curve[0].d;
-  if (hours >= curve[curve.length - 1].t) return curve[curve.length - 1].d;
+function sampleCurve(curve: CurvePoint[], minutes: number): number {
+  if (!curve.length) return 0;
+  if (minutes <= curve[0].t) return curve[0].d;
+  if (minutes >= curve[curve.length - 1].t) return curve[curve.length - 1].d;
   for (let i = 0; i < curve.length - 1; i++) {
     const a = curve[i];
     const b = curve[i + 1];
-    if (hours >= a.t && hours <= b.t) {
-      const f = (hours - a.t) / (b.t - a.t);
+    if (minutes >= a.t && minutes <= b.t) {
+      const f = (minutes - a.t) / (b.t - a.t);
       return a.d + f * (b.d - a.d);
     }
   }
   return curve[curve.length - 1].d;
 }
 
-function nowLabel(minutes: number) {
+function minutesLabel(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = Math.floor(minutes % 60);
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
 
-function useNowMinutes() {
-  const [m, setM] = useState(() => {
-    const d = new Date();
-    return d.getHours() * 60 + d.getMinutes();
-  });
-  useEffect(() => {
-    const id = setInterval(() => {
-      const d = new Date();
-      setM(d.getHours() * 60 + d.getMinutes());
-    }, 30_000);
-    return () => clearInterval(id);
-  }, []);
-  // For demo: clamp into the live window so the dot is always visible on the
-  // sample curve, which only covers 08:00–15:00.
-  return Math.max(8 * 60, Math.min(15 * 60, m));
+function hourTicksBetween(xMin: number, xMax: number): number[] {
+  const out: number[] = [];
+  const startHour = Math.ceil(xMin / 60);
+  const endHour = Math.floor(xMax / 60);
+  const step = endHour - startHour <= 6 ? 1 : 2;
+  for (let h = startHour; h <= endHour; h += step) out.push(h);
+  return out;
 }
 
 /* ── ROI strip (lighter) ────────────────────────────────────────────────── */
