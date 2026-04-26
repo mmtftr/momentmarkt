@@ -26,6 +26,11 @@
  *     from the view content above it without a hard line.
  *   - Active tab: spark text (`#f2542d`) + small spark dot below the icon.
  *   - Inactive tab: cocoa text (`#6f3f2c`), no dot.
+ *   - Issue #156 phase 4 — Discover tab carries an unseen-special red
+ *     dot in the icon's top-right when `hasUnseenDiscover` is true.
+ *     Apple Mail / iMessage badge anchor: 8pt circle, spark fill, white
+ *     border so it reads against the cream navbar AND against the spark
+ *     icon when the Discover tab is active.
  *
  * The component is purely presentational — App.tsx owns `viewMode` and
  * reacts to `onViewChange`. Tap fires a `lightTap` haptic so the switch
@@ -65,9 +70,21 @@ const TABS: readonly TabSpec[] = [
 type Props = {
   activeView: ViewMode;
   onViewChange: (view: ViewMode) => void;
+  /** Issue #156 phase 4 — when true, paint a small red dot in the
+   *  top-right of the Discover tab's icon area to surface "fresh
+   *  special offer awaits". App.tsx flips this on when a fresh
+   *  /offers/alternatives fetch lands a variant flagged
+   *  `is_special_surface=true` while the user is on a non-Discover
+   *  tab; clears it when the user opens Discover. Optional so the
+   *  navbar still renders without the dot wiring (e.g. tests). */
+  hasUnseenDiscover?: boolean;
 };
 
-export function BottomNavBar({ activeView, onViewChange }: Props): ReactElement {
+export function BottomNavBar({
+  activeView,
+  onViewChange,
+  hasUnseenDiscover = false,
+}: Props): ReactElement {
   const insets = useSafeAreaInsets();
   return (
     <View
@@ -86,11 +103,15 @@ export function BottomNavBar({ activeView, onViewChange }: Props): ReactElement 
     >
       {TABS.map((tab) => {
         const isActive = tab.key === activeView;
+        // Issue #156 phase 4 — only the Discover tab carries the
+        // unseen-special dot. Other tabs always render unbadged.
+        const showUnseenDot = tab.key === "discover" && hasUnseenDiscover;
         return (
           <NavTab
             key={tab.key}
             spec={tab}
             active={isActive}
+            showUnseenDot={showUnseenDot}
             onPress={() => {
               if (!isActive) {
                 lightTap();
@@ -107,17 +128,23 @@ export function BottomNavBar({ activeView, onViewChange }: Props): ReactElement 
 function NavTab({
   spec,
   active,
+  showUnseenDot,
   onPress,
 }: {
   spec: TabSpec;
   active: boolean;
+  showUnseenDot: boolean;
   onPress: () => void;
 }): ReactElement {
   const tintColor = active ? "#f2542d" : "#6f3f2c";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Switch to ${spec.label}`}
+      accessibilityLabel={
+        showUnseenDot
+          ? `Switch to ${spec.label} — new offer for you`
+          : `Switch to ${spec.label}`
+      }
       accessibilityState={{ selected: active }}
       onPress={onPress}
       style={({ pressed }) => [
@@ -125,13 +152,39 @@ function NavTab({
         { opacity: pressed ? 0.7 : 1, paddingTop: 6, paddingBottom: 4 },
       ]}
     >
-      <SymbolView
-        name={spec.sfSymbol}
-        tintColor={tintColor}
-        size={22}
-        weight={active ? "semibold" : "regular"}
-        style={{ width: 22, height: 22 }}
-      />
+      {/* Wrap the icon so the unseen-special dot can absolute-position
+          relative to the icon (top-right). The wrapper is a fixed
+          22x22 square matching the SymbolView's intrinsic size so the
+          dot's anchor stays stable across active/inactive weight
+          changes. */}
+      <View style={{ width: 22, height: 22 }}>
+        <SymbolView
+          name={spec.sfSymbol}
+          tintColor={tintColor}
+          size={22}
+          weight={active ? "semibold" : "regular"}
+          style={{ width: 22, height: 22 }}
+        />
+        {showUnseenDot ? (
+          // 8pt diameter, spark-tinted, white border so it reads against
+          // the cream navbar AND against the spark icon when active.
+          // Top-right of the icon — Apple Mail / iMessage badge anchor.
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: -2,
+              right: -3,
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: "#f2542d",
+              borderWidth: 1.5,
+              borderColor: "#fff8ee",
+            }}
+          />
+        ) : null}
+      </View>
       <Text
         style={{
           fontSize: 10,

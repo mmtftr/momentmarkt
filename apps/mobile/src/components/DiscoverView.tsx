@@ -76,6 +76,12 @@ type Props = {
    *  preference-signal append still fires on the same gesture; saving
    *  is additive, not a replacement. */
   onSavePass: (variant: AlternativeOffer) => void;
+  /** Issue #156 phase 4 — fired with the resolved variants[] every time
+   *  a fresh fetch lands. App.tsx scans for `is_special_surface=true`
+   *  and arms the Discover-tab red dot if the user is currently on a
+   *  non-Discover tab. Optional so DiscoverView remains usable in
+   *  testing harnesses without the dot wiring. */
+  onVariantsResolved?: (variants: AlternativeOffer[]) => void;
 };
 
 export function DiscoverView({
@@ -85,6 +91,7 @@ export function DiscoverView({
   swipeHistory,
   onAppendSwipeHistory,
   onSavePass,
+  onVariantsResolved,
 }: Props): ReactElement {
   const insets = useSafeAreaInsets();
   const [variants, setVariants] = useState<AlternativeOffer[] | null>(null);
@@ -101,6 +108,14 @@ export function DiscoverView({
   useEffect(() => {
     swipeHistoryRef.current = swipeHistory;
   }, [swipeHistory]);
+  // Issue #156 phase 4 — same ref pattern as swipeHistoryRef so the
+  // fetch effect doesn't re-fire just because the parent re-rendered
+  // and gave us a fresh callback identity. The fetch reads the ref's
+  // current value at resolve time.
+  const onVariantsResolvedRef = useRef(onVariantsResolved);
+  useEffect(() => {
+    onVariantsResolvedRef.current = onVariantsResolved;
+  }, [onVariantsResolved]);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -126,6 +141,12 @@ export function DiscoverView({
         } else {
           setVariants(res.variants);
           setStackKey((k) => k + 1);
+          // Issue #156 phase 4 — feed the resolved variants up to App.tsx
+          // so the unread-special detector can arm the Discover-tab red
+          // dot when a fresh is_special_surface card lands while the
+          // user is on a non-Discover tab. Optional callback so older
+          // call sites / tests don't break when omitted.
+          onVariantsResolvedRef.current?.(res.variants);
         }
       })
       .finally(() => {

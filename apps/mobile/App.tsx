@@ -35,6 +35,7 @@ import { CityMap } from "./src/components/CityMap";
 import { DevPanel, type DevPanelSignal } from "./src/components/DevPanel";
 import { DiscoverView } from "./src/components/DiscoverView";
 import { DEFAULT_LENS, type LensKey } from "./src/components/LensChips";
+import { MerchantDetailView } from "./src/components/MerchantDetailView";
 import { RedeemFlow } from "./src/components/RedeemFlow";
 import { SwipeOfferStack } from "./src/components/SwipeOfferStack";
 import { SwipeStackSkeleton } from "./src/components/SwipeStackSkeleton";
@@ -47,6 +48,7 @@ import {
   type MerchantListItem,
   type PriorSwipe,
 } from "./src/lib/api";
+import { lightTap } from "./src/lib/haptics";
 import { makeSavedPassId, type SavedPass } from "./src/types/savedPass";
 import { useSignals } from "./src/lib/useSignals";
 import { cityProfiles, type DemoCityId, type DemoCityProfile } from "./src/demo/cityProfiles";
@@ -139,6 +141,18 @@ export default function App() {
   // off the fetch; false when we either land variants or fall back to
   // the focused offer view.
   const [loadingAlternatives, setLoadingAlternatives] = useState(false);
+  // Issue #156 phase 4 — Discover-tab red dot. When a fresh
+  // /offers/alternatives fetch lands a variant flagged
+  // `is_special_surface=true` AND the user is on a non-Discover tab,
+  // we set `hasUnseenSpecial=true` so the BottomNavBar paints a small
+  // red dot on the Discover icon. Switching to Discover clears the
+  // flag AND records the variant_id in `seenSpecialIds` so subsequent
+  // re-fetches that re-surface the same variant don't keep re-arming
+  // the dot. The set lives in a ref because it's pure dedupe
+  // bookkeeping — no UI binding needed, and using state would force
+  // a re-render every time the user opened Discover.
+  const seenSpecialIds = useRef<Set<string>>(new Set());
+  const [hasUnseenSpecial, setHasUnseenSpecial] = useState(false);
   // Issue #136 — preference history persisted across swipe rounds in this
   // session. Each round's PriorSwipe entries get appended; we send the
   // accumulated history with the NEXT /offers/alternatives call so the
@@ -186,6 +200,15 @@ export default function App() {
   // legacy demo flow + the merchant-tap-from-Browse-list flow (those
   // commits don't come from the Wallet tab).
   const [redeemingPassId, setRedeemingPassId] = useState<string | null>(null);
+  // Issue #160 — merchant-first Browse: tapping a merchant in the
+  // wallet drawer's merchant list opens this slide-in detail view
+  // instead of triggering the alternatives swipe (which is Discover's
+  // job — that's the deal-flow surface). Null while no detail is open.
+  // The detail view's "Redeem now" CTA hands back to
+  // handleRedeemFromMerchantDetail which routes into the existing
+  // offer→redeeming→success state machine.
+  const [merchantDetail, setMerchantDetail] =
+    useState<MerchantListItem | null>(null);
 
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -323,6 +346,80 @@ export default function App() {
     setStep("offer");
   }, []);
 
+  // Issue #160 — merchant-first Browse handlers. Tapping a merchant in
+  // the Browse list opens the slide-in detail view (cream overlay,
+  // hero photo, info row, active offer card). The detail view is a
+  // pure presentation surface — no fetch, no state machine — so the
+  // open/close is a one-line setState.
+  const handleOpenMerchantDetail = useCallback(
+    (merchant: MerchantListItem) => {
+      lightTap();
+      setMerchantDetail(merchant);
+    },
+    [],
+  );
+  const handleCloseMerchantDetail = useCallback(() => {
+    setMerchantDetail(null);
+  }, []);
+  // "Redeem now" inside the detail view → close the detail + route into
+  // the existing offer→redeeming→success state machine. We don't go
+  // through the alternatives swipe stack (that's the Discover deal-flow
+  // surface, intentionally separated post-#160). Setting
+  // settledVariant=null + step="offer" makes SheetBody render the
+  // focused OfferStack with the canonical demo widget — same path the
+  // pre-#160 fallback used when /offers/alternatives returned no
+  // variants for a merchant tap. The merchant's discount headline
+  // shows on the detail view itself; the focused offer widget is the
+  // commit surface that owns the QR + cashback choreography.
+  const handleRedeemFromMerchantDetail = useCallback(
+    (_merchant: MerchantListItem) => {
+      setMerchantDetail(null);
+      setSettledVariant(null);
+      setAlternatives(null);
+      setViewMode("browse");
+      setStep("offer");
+    },
+    [],
+  );
+  // No-offer placeholder CTA → close detail + flip to Discover so the
+  // user sees the LLM-curated swipe stack. Discover is the "I want a
+  // deal" mental-model surface; jumping there from a no-offer Browse
+  // detail is the clean handoff per Doruk's #160 split.
+  const handleGoToDiscoverFromDetail = useCallback(() => {
+    setMerchantDetail(null);
+    setViewMode("discover");
+  }, []);
+
+  // Issue #156 phase 4 — fired by DiscoverView (and the merchant-tap
+  // handler) whenever a fresh variants[] is resolved. Records every
+  // is_special_surface=true variant_id in `seenSpecialIds` if the
+  // user is currently on Discover (they'll see it directly, no dot
+  // needed); arms the dot if they're on a non-Discover tab. The
+  // dedupe via seenSpecialIds means a re-fetch of the same special
+  // doesn't re-trigger the dot every time.
+  const handleVariantsResolved = useCallback(
+    (resolvedVariants: AlternativeOffer[]) => {
+      const specials = resolvedVariants.filter((v) => v.is_special_surface);
+      if (specials.length === 0) return;
+      const seen = seenSpecialIds.current;
+      const fresh = specials.filter((v) => !seen.has(v.variant_id));
+      if (fresh.length === 0) return;
+      if (viewMode === "discover") {
+        // User is already on Discover — they're seeing the special directly,
+        // record it as seen so a follow-up fetch doesn't arm the dot.
+        for (const v of fresh) seen.add(v.variant_id);
+        return;
+      }
+      // Non-Discover tab: arm the dot AND record the ids so the next
+      // re-fetch doesn't keep re-triggering. Recording-on-arm matches
+      // the spec — the user "sees" the dot from the moment we set it,
+      // even though they haven't opened Discover yet.
+      for (const v of fresh) seen.add(v.variant_id);
+      setHasUnseenSpecial(true);
+    },
+    [viewMode],
+  );
+
   // Issue #116 / #132: tapping a merchant card in the wallet drawer's
   // search list now triggers the swipe-to-pick mechanic when the merchant
   // has an active_offer:
@@ -379,11 +476,15 @@ export default function App() {
         return;
       }
       setAlternatives(res.variants);
+      // Issue #156 phase 4 — feed the resolved variants through the
+      // unread-special detector so a fresh is_special_surface card
+      // arms the Discover-tab red dot if the user is still on Browse.
+      handleVariantsResolved(res.variants);
       // Step is already "alternatives" — no need to re-set it; the sheet
       // is already snapped open and the SheetBody will switch from the
       // skeleton to the real SwipeOfferStack via the cross-fade below.
     },
-    [swipeHistory],
+    [swipeHistory, handleVariantsResolved],
   );
 
   // Build PriorSwipe[] entries from a finished round's dwell map. The
@@ -618,6 +719,15 @@ export default function App() {
     setViewMode("discover");
   }, []);
 
+  // Issue #156 phase 4 — clear the unread-special dot whenever the
+  // user actually opens Discover. The dedupe set already retains the
+  // variant_ids that armed the dot, so a re-fetch returning the same
+  // specials won't re-trigger the badge.
+  useEffect(() => {
+    if (viewMode !== "discover") return;
+    setHasUnseenSpecial(false);
+  }, [viewMode]);
+
   const walletArea = (
     <View style={s("flex-1")}>
       {/* Full-bleed Apple Map background. Tapping a merchant's offer
@@ -817,6 +927,7 @@ export default function App() {
       swipeHistory={swipeHistory}
       onAppendSwipeHistory={handleAppendSwipeHistory}
       onSavePass={handleSavePass}
+      onVariantsResolved={handleVariantsResolved}
     />
   );
 
@@ -907,6 +1018,7 @@ export default function App() {
               <BottomNavBar
                 activeView={viewMode}
                 onViewChange={handleViewChange}
+                hasUnseenDiscover={hasUnseenSpecial}
               />
             ) : null}
           </View>
