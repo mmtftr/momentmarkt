@@ -204,23 +204,24 @@ export function DiscoverView({
   );
 
   return (
-    <View style={[...s("flex-1 bg-cream"), { paddingTop: insets.top }]}>
-      {/* Header eyebrow + lens chip row. The chips are the user-visible
-          mechanism switch — tapping flips both the active strategy and
-          (upstream) the variant pool. */}
-      <View style={[...s("px-5"), { paddingTop: 12, paddingBottom: 8 }]}>
+    <View style={[...s("flex-1 bg-cream"), { paddingTop: insets.top + 10 }]}>
+      {/* Sticky header (issue #171) — title pinned at the top of the
+          wrapper, OUTSIDE the swipe stack body, so it shares the
+          identical upper-header rhythm with Settings / Wallet / History.
+          The lens chips also live above the swipe surface and don't
+          scroll out (SwipeOfferStack is a fixed-position card stack, not
+          a ScrollView), so the whole top region is effectively sticky
+          by construction. */}
+      <View
+        style={[
+          ...s("flex-row items-center px-5"),
+          { paddingTop: 8, paddingBottom: 12 },
+        ]}
+      >
         <Text
           style={[
-            ...s("text-[11px] font-bold uppercase tracking-[3px] text-cocoa"),
-            { opacity: 0.55 },
-          ]}
-        >
-          MomentMarkt
-        </Text>
-        <Text
-          style={[
-            ...s("text-2xl font-black text-ink"),
-            { letterSpacing: -0.4, marginTop: 2 },
+            ...s("text-3xl font-black text-ink"),
+            { letterSpacing: -0.5 },
           ]}
         >
           Discover

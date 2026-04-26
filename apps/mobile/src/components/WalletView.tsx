@@ -56,29 +56,28 @@ export function WalletView({
 }: Props): ReactElement {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[...s("flex-1 bg-cream"), { paddingTop: insets.top }]}>
-      {/* Header — large title + subtitle row + Discover-more link. Same
-          eyebrow / title rhythm as DiscoverView so the two surfaces feel
-          like one product. */}
-      <View style={[...s("px-5"), { paddingTop: 12, paddingBottom: 8 }]}>
-        <Text
-          style={[
-            ...s("text-[11px] font-bold uppercase tracking-[3px] text-cocoa"),
-            { opacity: 0.55 },
-          ]}
-        >
-          MomentMarkt
-        </Text>
-        <View
-          style={[
-            ...s("flex-row items-end justify-between"),
-            { marginTop: 2 },
-          ]}
-        >
+    <View style={[...s("flex-1 bg-cream"), { paddingTop: insets.top + 10 }]}>
+      {/* Sticky header (issue #171) — pinned at the top of the wrapper,
+          OUTSIDE the ScrollView, so it stays put while saved-pass rows
+          scroll beneath. Mirrors the SettingsScreen pattern so all four
+          tab surfaces share the same upper-header rhythm.
+
+          Composition: bold "Wallet" title (matches Settings/History/
+          Discover), subtitle line ("{N} saved offers"), and the
+          Discover-more shortcut link to keep the existing affordance.
+          The title row uses Settings' text-3xl font-black + -0.5
+          letter-spacing so the four titles read as one type system. */}
+      <View
+        style={[
+          ...s("px-5"),
+          { paddingTop: 8, paddingBottom: 12 },
+        ]}
+      >
+        <View style={s("flex-row items-end justify-between")}>
           <Text
             style={[
-              ...s("text-2xl font-black text-ink"),
-              { letterSpacing: -0.4 },
+              ...s("text-3xl font-black text-ink"),
+              { letterSpacing: -0.5 },
             ]}
           >
             Wallet
@@ -93,7 +92,7 @@ export function WalletView({
             hitSlop={8}
             style={({ pressed }) => ({
               opacity: pressed ? 0.55 : 1,
-              paddingBottom: 4,
+              paddingBottom: 6,
             })}
           >
             <Text
@@ -125,7 +124,7 @@ export function WalletView({
           style={s("flex-1")}
           contentContainerStyle={[
             ...s("px-5"),
-            { paddingTop: 12, paddingBottom: 24 },
+            { paddingTop: 4, paddingBottom: 32 },
           ]}
           showsVerticalScrollIndicator={false}
         >

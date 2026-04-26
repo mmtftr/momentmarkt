@@ -438,23 +438,31 @@ export function HistoryScreen({
     </Pressable>
   ) : null;
 
+  // Sticky header — pinned at the top of the wrapper, OUTSIDE the
+  // ScrollView (issue #171). Mirrors SettingsScreen so all four tab
+  // surfaces (Discover / Wallet / History / Settings) share the same
+  // upper-header rhythm — the title row stays put while body content
+  // scrolls beneath. In overlay mode the back chevron sits left of the
+  // title; in tab mode the navbar IS the navigation so no chevron.
+  const stickyHeader = (
+    <View
+      style={[
+        ...s("flex-row items-center px-5"),
+        { paddingTop: 8, paddingBottom: 12, gap: 8 },
+      ]}
+    >
+      {backChevron}
+      <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
+        History
+      </Text>
+    </View>
+  );
+
   if (redemptions.length === 0) {
     return (
       <GestureDetector gesture={dismissGesture}>
         <Animated.View style={overlayWrapperStyle} pointerEvents="auto">
-          {isOverlay ? (
-            <View
-              style={[
-                ...s("flex-row items-center px-5"),
-                { paddingTop: 8, paddingBottom: 12, gap: 8 },
-              ]}
-            >
-              {backChevron}
-              <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
-                History
-              </Text>
-            </View>
-          ) : null}
+          {stickyHeader}
           <View style={s("flex-1 items-center justify-center px-5")}>
             <SymbolView
               name="wallet.pass.fill"
@@ -478,9 +486,10 @@ export function HistoryScreen({
   return (
     <GestureDetector gesture={dismissGesture}>
     <Animated.View style={overlayWrapperStyle} pointerEvents="auto">
+      {stickyHeader}
       <ScrollView
         style={s("flex-1")}
-        contentContainerStyle={[...s("px-5"), { paddingBottom: 32 }]}
+        contentContainerStyle={[...s("px-5"), { paddingBottom: 32, paddingTop: 4 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -490,21 +499,6 @@ export function HistoryScreen({
           />
         }
       >
-        {/* Header — top-left chevron back (when used as an overlay) +
-            large title. Replaces the original top-right X close to match
-            iOS's standard back-affordance pattern. */}
-        <View
-          style={[
-            ...s("flex-row items-center"),
-            { paddingTop: 8, paddingBottom: 12, gap: 8 },
-          ]}
-        >
-          {backChevron}
-          <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
-            History
-          </Text>
-        </View>
-
         {/* ── This month ──────────────────────────────────────────────── */}
         <SectionHeader>This month</SectionHeader>
         <GroupedSection>
