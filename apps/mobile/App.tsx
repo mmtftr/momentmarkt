@@ -26,7 +26,6 @@ import { SymbolView } from "expo-symbols";
 
 import { CityMap } from "./src/components/CityMap";
 import { DevPanel, type DevPanelSignal } from "./src/components/DevPanel";
-import { MapTopChip } from "./src/components/MapTopChip";
 import { RedeemFlow } from "./src/components/RedeemFlow";
 import { WalletSheetContent } from "./src/components/WalletSheetContent";
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
@@ -217,9 +216,9 @@ export default function App() {
     setSheetIndex(index);
   }, []);
 
-  const handleOpenDevPanel = useCallback(() => {
-    setDevPanelOpen(true);
-  }, []);
+  // Issue #119: handleOpenDevPanel removed — the MapTopChip was the last
+  // caller. DevPanel is now reachable only through Settings → Demo & Debug,
+  // which has its own onRunSurfacing wrapper (settingsDevPanelProps below).
   const handleCloseDevPanel = useCallback(() => {
     setDevPanelOpen(false);
   }, []);
@@ -300,30 +299,15 @@ export default function App() {
         ]}
       />
 
-      {/* Apple-Maps-style search chip floating top-center (issue #70 part C).
-          Pure presentational; tap routes to the DevPanel overlay so the
-          city/weather chip doubles as a discoverable engineering surface
-          entry point during the demo.
-          Issue #80: only render on the silent step. Once an offer / receipt /
-          history surface is the focus, the chip becomes redundant context and
-          would compete with the consumer view — hide it. */}
-      {!sideBySide && step === "silent" ? (
-        <MapTopChip
-          city={city === "berlin" ? "Berlin" : "Zurich"}
-          area={city === "berlin" ? "Mitte" : "HB"}
-          tempC={city === "berlin" ? 11 : 14}
-          weatherSummary={
-            city === "berlin" ? "Rain in 22 min" : "Clear · light breeze"
-          }
-          onPress={handleOpenDevPanel}
-        />
-      ) : null}
+      {/* Issue #119: the centred MapTopChip search-style pill was dropped in
+          favour of a top-LEFT frosted weather pill + a top-RIGHT icon cluster
+          (rendered one level up in the compact branch below). DevPanel is now
+          reachable only through Settings → Demo & Debug. */}
 
       {/* Issue #103: the top-right wrench DevPanelTrigger has been removed.
           Settings is now a real bottom tab (UITabBarController) and the
           DevPanel is folded into the Settings tab as the "Demo & Debug"
-          section (#80). The MapTopChip above is still a contextual quick
-          path into the DevPanelOverlay during the silent Home beat. */}
+          section (#80). */}
 
       {/* Bottom sheet wallet drawer. `bottomInset={0}` lets the sheet
           extend all the way to the screen bottom, so the cream
@@ -434,32 +418,42 @@ export default function App() {
           ) : (
             <>
               {walletArea}
-              {/* Top-right map icons (compact only). Clock opens the
-                  History overlay, gear opens Settings. Both render as
-                  slide-in sheets layered above the wallet drawer. Hidden
-                  while a non-silent step is active so they don't compete
-                  with the surfaced offer / redeem / success surfaces. */}
+              {/* Top-of-map overlay (compact only, silent step only). Single
+                  absolutely-positioned row holding the LEFT frosted weather
+                  pill (info-only) and the RIGHT icon cluster (clock = History,
+                  gear = Settings). Hidden while a non-silent step is active so
+                  they don't compete with the surfaced offer / redeem / success
+                  surfaces. */}
               {step === "silent" ? (
                 <View
                   style={[
-                    ...s("absolute flex-row gap-2"),
+                    ...s("absolute flex-row items-center"),
                     {
                       top: insets.top + 12,
+                      left: 16,
                       right: 16,
+                      justifyContent: "space-between",
                     },
                   ]}
                   pointerEvents="box-none"
                 >
-                  <MapIconButton
-                    sfSymbol="clock"
-                    accessibilityLabel="Open history"
-                    onPress={handleOpenHistory}
+                  <MapWeatherPill
+                    tempC={city === "berlin" ? 11 : 14}
+                    neighborhood={city === "berlin" ? "Mitte" : "HB"}
+                    weatherEmoji={city === "berlin" ? "☔" : "☀"}
                   />
-                  <MapIconButton
-                    sfSymbol="gearshape"
-                    accessibilityLabel="Open settings"
-                    onPress={handleOpenSettings}
-                  />
+                  <View style={s("flex-row gap-2")}>
+                    <MapIconButton
+                      sfSymbol="clock"
+                      accessibilityLabel="Open history"
+                      onPress={handleOpenHistory}
+                    />
+                    <MapIconButton
+                      sfSymbol="gearshape"
+                      accessibilityLabel="Open settings"
+                      onPress={handleOpenSettings}
+                    />
+                  </View>
                 </View>
               ) : null}
             </>
@@ -485,9 +479,13 @@ export default function App() {
   );
 }
 
-/** Round 36pt button for the map's top-right corner — clock + gear icons.
- *  Mirrors the Settings X close button styling so all 3 controls share
- *  one visual language: cream-on-white with a subtle ink/8 border. */
+/** Round 44pt button for the map's top-right corner — clock + gear icons.
+ *  Issue #119: bumped from 36→44pt + SF Symbol 18→22pt, swapped solid white
+ *  for a frosted-glass-ish look (semi-transparent white + shadow) so the
+ *  controls read as Apple-Maps-style floating buttons. Real iOS BlurView
+ *  via expo-blur would be most native but isn't installed and would force
+ *  a 10-15 min native rebuild — semi-transparent white + shadow gets us
+ *  ~80% of the way there with zero rebuild. */
 function MapIconButton({
   sfSymbol,
   accessibilityLabel,
@@ -504,27 +502,65 @@ function MapIconButton({
       onPress={onPress}
       hitSlop={10}
       style={[
-        ...s("rounded-full bg-white items-center justify-center"),
+        ...s("rounded-full items-center justify-center"),
         {
-          width: 36,
-          height: 36,
+          width: 44,
+          height: 44,
+          backgroundColor: "rgba(255, 255, 255, 0.88)",
           borderWidth: 1,
           borderColor: "rgba(23, 18, 15, 0.12)",
           shadowColor: "#17120f",
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
         },
       ]}
     >
       <SymbolView
         name={sfSymbol}
         tintColor="#17120f"
-        size={18}
+        size={22}
         weight="medium"
-        style={{ width: 18, height: 18 }}
+        style={{ width: 22, height: 22 }}
       />
     </Pressable>
+  );
+}
+
+/** Static info-only weather pill for the map's top-LEFT corner (issue #119).
+ *  Matches MapIconButton's frosted-glass look so the LEFT pill + RIGHT icon
+ *  cluster read as one visual family. No onPress — DevPanel is reachable
+ *  only through Settings → Demo & Debug now. */
+function MapWeatherPill({
+  tempC,
+  neighborhood,
+  weatherEmoji,
+}: {
+  tempC: number;
+  neighborhood: string;
+  weatherEmoji: string;
+}) {
+  return (
+    <View
+      style={[
+        ...s("rounded-full flex-row items-center gap-2 px-4"),
+        {
+          backgroundColor: "rgba(255, 255, 255, 0.88)",
+          borderWidth: 1,
+          borderColor: "rgba(23, 18, 15, 0.12)",
+          height: 44,
+          shadowColor: "#17120f",
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+        },
+      ]}
+    >
+      <Text style={s("text-base")}>{weatherEmoji}</Text>
+      <Text style={[...s("text-sm font-bold text-ink"), { letterSpacing: -0.2 }]}>
+        {Math.round(tempC)}°C · {neighborhood}
+      </Text>
+    </View>
   );
 }
 
