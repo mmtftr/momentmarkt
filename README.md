@@ -14,6 +14,19 @@
 
 [**Demo video**](./assets/momentmarkt-demo.mp4) · [**Tech video**](./assets/momentmarkt-tech.mp4) · [**Submission**](./work/SUBMISSION.md) · [**Architecture**](./assets/architecture-slide.md) · [**Spec**](./work/SPEC.md) · [**Cover image**](./assets/cover.html)
 
+<table>
+<tr>
+<td width="50%" align="center">
+<strong>Demo · product walkthrough</strong><br/>
+<video src="https://github.com/momentmarkt/momentmarkt/raw/main/assets/momentmarkt-demo.mp4" controls width="100%"></video>
+</td>
+<td width="50%" align="center">
+<strong>Tech · architecture walkthrough</strong><br/>
+<video src="https://github.com/momentmarkt/momentmarkt/raw/main/assets/momentmarkt-tech.mp4" controls width="100%"></video>
+</td>
+</tr>
+</table>
+
 </div>
 
 ---
