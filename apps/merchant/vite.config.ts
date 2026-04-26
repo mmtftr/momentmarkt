@@ -20,7 +20,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve(__dirname, "index.html"),
-        componentDrafts: resolve(__dirname, "component-drafts.html"),
         onboardingPreview: resolve(__dirname, "onboarding-preview.html"),
       },
     },
