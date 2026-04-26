@@ -144,29 +144,14 @@ export function WalletSheetContent({
             so the user only sees the top portion until they drag up. */}
         <MerchantSearchList city={citySlug} onMerchantTap={onMerchantTap} />
 
-        <View
-          style={[
-            ...s("rounded-full bg-white px-3 py-2 flex-row items-center gap-2 mb-4 mt-4"),
-            {
-              alignSelf: "center",
-              borderWidth: 1,
-              borderColor: "rgba(23, 18, 15, 0.08)",
-            },
-          ]}
-        >
-          <Text style={s("text-base text-spark")}>◉</Text>
-          <Text
-            style={s(
-              "text-xs font-semibold uppercase tracking-[2px] text-cocoa",
-            )}
-          >
-            {cityLabel}
-          </Text>
-        </View>
+        {/* The "◉ Berlin Mitte" pill that used to sit here was dropped:
+            the same city info is now shown in the top-left frosted weather
+            pill on the map (issue #119), so the in-drawer pill duplicated
+            it and crowded the search list. */}
 
         <View
           style={[
-            ...s("rounded-[22px] bg-white p-5"),
+            ...s("rounded-[22px] bg-white p-5 mt-4"),
             {
               borderWidth: 1,
               borderColor: "rgba(23, 18, 15, 0.06)",

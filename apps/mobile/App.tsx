@@ -644,7 +644,11 @@ function SheetBody({
   if (step === "redeeming") {
     return (
       <BottomSheetView style={[...s("flex-1 bg-cream")]}>
-        <RedeemFlow offer={miaRainOffer} onComplete={onRedeemComplete} />
+        <RedeemFlow
+          offer={miaRainOffer}
+          onComplete={onRedeemComplete}
+          onCancel={onSuccessDone}
+        />
       </BottomSheetView>
     );
   }

@@ -220,28 +220,28 @@ export function HistoryScreen({
       ]
     : s("flex-1 bg-cream");
 
-  const closeButton = onClose ? (
+  const backChevron = onClose ? (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Close history"
+      accessibilityLabel="Back to wallet"
       onPress={onClose}
-      hitSlop={10}
-      style={[
-        ...s("rounded-full bg-white items-center justify-center"),
+      hitSlop={12}
+      style={({ pressed }) => [
+        ...s("flex-row items-center"),
         {
-          width: 32,
-          height: 32,
-          borderWidth: 1,
-          borderColor: "rgba(23, 18, 15, 0.08)",
+          opacity: pressed ? 0.55 : 1,
+          marginLeft: -6,
+          paddingVertical: 6,
+          paddingRight: 4,
         },
       ]}
     >
       <SymbolView
-        name="xmark"
-        tintColor="#17120f"
-        size={14}
-        weight="medium"
-        style={{ width: 14, height: 14 }}
+        name="chevron.left"
+        tintColor="#f2542d"
+        size={22}
+        weight="semibold"
+        style={{ width: 22, height: 22 }}
       />
     </Pressable>
   ) : null;
@@ -252,14 +252,14 @@ export function HistoryScreen({
         {isOverlay ? (
           <View
             style={[
-              ...s("flex-row items-center justify-between px-5"),
-              { paddingTop: 8, paddingBottom: 12 },
+              ...s("flex-row items-center px-5"),
+              { paddingTop: 8, paddingBottom: 12, gap: 8 },
             ]}
           >
+            {backChevron}
             <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
               History
             </Text>
-            {closeButton}
           </View>
         ) : null}
         <View style={s("flex-1 items-center justify-center px-5")}>
@@ -295,17 +295,19 @@ export function HistoryScreen({
           />
         }
       >
-        {/* Header — large title plus optional close X (overlay mode). */}
+        {/* Header — top-left chevron back (when used as an overlay) +
+            large title. Replaces the original top-right X close to match
+            iOS's standard back-affordance pattern. */}
         <View
           style={[
-            ...s("flex-row items-end justify-between"),
-            { paddingTop: 8, paddingBottom: 12 },
+            ...s("flex-row items-center"),
+            { paddingTop: 8, paddingBottom: 12, gap: 8 },
           ]}
         >
+          {backChevron}
           <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
             History
           </Text>
-          {closeButton}
         </View>
 
         {/* ── This month ──────────────────────────────────────────────── */}

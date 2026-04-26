@@ -1,3 +1,4 @@
+import { SymbolView } from "expo-symbols";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
@@ -10,7 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import type { DemoOffer } from "../demo/miaOffer";
-import { heavyTap } from "../lib/haptics";
+import { heavyTap, lightTap } from "../lib/haptics";
 import { generateRedeemToken } from "../lib/redeem";
 import { s } from "../styles";
 
@@ -21,10 +22,8 @@ type Props = {
   /** Seconds until the token expires. Defaults to 90s — comfortable demo window. */
   expiresInSeconds?: number;
   onTap: (token: string) => void;
-  /** Optional cancel callback. Currently no UI surface invokes it — the
-   *  Cancel pill was removed because the new IA dismisses the redeem
-   *  sheet via the bottom-sheet drag handle. Kept as an optional prop
-   *  for callers that want to wire their own back affordance. */
+  /** Top-left chevron back handler. When provided, renders a chevron in
+   *  the header that returns the user out of the redeem flow. */
   onCancel?: () => void;
 };
 
@@ -41,6 +40,7 @@ export function QrRedeemScreen({
   tokenOverride,
   expiresInSeconds = DEFAULT_EXPIRES_IN_S,
   onTap,
+  onCancel,
 }: Props) {
   const token = useMemo(
     () => tokenOverride ?? generateRedeemToken(offer.id),
@@ -110,7 +110,39 @@ export function QrRedeemScreen({
 
   return (
     <View style={s("flex-1 bg-cream px-5 py-6")}>
-      <View>
+      {/* Header: top-left chevron back (when wired) above the merchant
+          name. Matches the Settings + History overlay header pattern so
+          all three "secondary surfaces" share one back-affordance. */}
+      {onCancel ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to wallet"
+          onPress={() => {
+            lightTap();
+            onCancel();
+          }}
+          hitSlop={12}
+          style={({ pressed }) => [
+            ...s("flex-row items-center"),
+            {
+              opacity: pressed ? 0.55 : 1,
+              marginLeft: -6,
+              paddingVertical: 6,
+              paddingRight: 4,
+              alignSelf: "flex-start",
+            },
+          ]}
+        >
+          <SymbolView
+            name="chevron.left"
+            tintColor="#f2542d"
+            size={22}
+            weight="semibold"
+            style={{ width: 22, height: 22 }}
+          />
+        </Pressable>
+      ) : null}
+      <View style={onCancel ? s("mt-2") : undefined}>
         <Text style={s("text-xs font-bold uppercase tracking-[3px] text-cocoa")}>
           Simulated checkout
         </Text>

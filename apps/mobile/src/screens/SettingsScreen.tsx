@@ -127,36 +127,36 @@ export function SettingsScreen(props: Props): ReactElement | null {
     >
       <View
         style={[
-          ...s("flex-row items-center justify-between px-5"),
-          { paddingTop: 8, paddingBottom: 12 },
+          ...s("flex-row items-center px-5"),
+          { paddingTop: 8, paddingBottom: 12, gap: 8 },
         ]}
       >
-        <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
-          Settings
-        </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close settings"
+          accessibilityLabel="Back to wallet"
           onPress={onClose}
-          hitSlop={10}
-          style={[
-            ...s("rounded-full bg-white items-center justify-center"),
+          hitSlop={12}
+          style={({ pressed }) => [
+            ...s("flex-row items-center"),
             {
-              width: 32,
-              height: 32,
-              borderWidth: 1,
-              borderColor: "rgba(23, 18, 15, 0.08)",
+              opacity: pressed ? 0.55 : 1,
+              marginLeft: -6,
+              paddingVertical: 6,
+              paddingRight: 4,
             },
           ]}
         >
           <SymbolView
-            name="xmark"
-            tintColor="#17120f"
-            size={14}
-            weight="medium"
-            style={{ width: 14, height: 14 }}
+            name="chevron.left"
+            tintColor="#f2542d"
+            size={22}
+            weight="semibold"
+            style={{ width: 22, height: 22 }}
           />
         </Pressable>
+        <Text style={[...s("text-3xl font-black text-ink"), { letterSpacing: -0.5 }]}>
+          Settings
+        </Text>
       </View>
 
       <ScrollView
