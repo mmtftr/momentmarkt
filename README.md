@@ -12,7 +12,7 @@
 [![Mobile: Expo + RN](https://img.shields.io/badge/mobile-Expo%20%2B%20React%20Native-0a7e8c)](./apps/mobile)
 [![Backend: FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)](./apps/backend)
 
-[**Submission**](./work/SUBMISSION.md) · [**Architecture**](./assets/architecture-slide.md) · [**Spec**](./work/SPEC.md) · [**Cover image**](./assets/cover.html)
+[**Demo video**](./assets/momentmarkt-demo.mp4) · [**Tech video**](./assets/momentmarkt-tech.mp4) · [**Submission**](./work/SUBMISSION.md) · [**Architecture**](./assets/architecture-slide.md) · [**Spec**](./work/SPEC.md) · [**Cover image**](./assets/cover.html)
 
 </div>
 
@@ -145,10 +145,8 @@ Tavily, no Foursquare, no CH GTFS bind on the Zürich swap.
 
 - **Devpost field drafts** (Short Description + 6 structured fields per
   `context/HACKATHON.md`): `work/SUBMISSION.md`
-- **Demo video** (≤55s on iOS Simulator): _link pending — recording is the
-  user's last-mile_
-- **Tech video** (≤55s; architecture slide → live editor → live phone):
-  _link pending — recording is the user's last-mile_
+- **Demo video** (≤55s on iOS Simulator): [`assets/momentmarkt-demo.mp4`](./assets/momentmarkt-demo.mp4)
+- **Tech video** (≤55s; architecture slide → live editor → live phone): [`assets/momentmarkt-tech.mp4`](./assets/momentmarkt-tech.mp4)
 - **16:9 cover image**: _path pending_ — concept locked in
   `work/SUBMISSION.md` under "Project cover image" (phone frame with
   rain-trigger GenUI widget on iOS Simulator chrome over a Berlin Mitte map
