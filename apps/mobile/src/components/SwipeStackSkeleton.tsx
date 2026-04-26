@@ -1,11 +1,9 @@
 /**
- * SwipeStackSkeleton — shimmer placeholder while /offers/alternatives loads (#156).
+ * SwipeStackSkeleton — pulsing placeholder while /offers/alternatives loads (#156).
  *
- * Industry-standard loading state (Apple Music / Spotify pattern). Pre-#156
- * the user tapped a merchant or flipped a lens chip and got ~500ms-2s of
- * dead air before the swipe stack popped in. The instant visual feedback
- * + the rhythmic shimmer reads as "the system is doing something" rather
- * than "this is broken."
+ * Industry-standard loading state (Apple Settings / iMessage pattern). The
+ * instant visual feedback + the rhythmic unison pulse reads as "the system
+ * is doing something" rather than "this is broken."
  *
  * Visual mirrors `SwipeOfferStack` so the cross-fade on resolve lands the
  * real cards in the same spot the skeleton rectangles were occupying:
@@ -14,11 +12,17 @@
  *   • Each card has placeholder rectangles for: photo region (top ~60%),
  *     title bar (~70% width), subtitle bar (~50% width), discount badge
  *     (top-right square)
- *   • A diagonal gradient sweeps left-to-right across each card every
- *     1.6s — `useAnimatedStyle` + `withRepeat` + `interpolate` over a
- *     translateX from -screenWidth to +screenWidth. Reanimated drives
- *     the loop on the UI thread so the JS thread stays free for the
- *     pending fetch.
+ *   • Each placeholder rectangle's background opacity pulses between
+ *     ~0.06 and ~0.12 ink on a 1.5s sin-eased loop. All rectangles
+ *     share one driver SV so the pulse reads as a single breathing
+ *     surface rather than independent flickers.
+ *
+ * #170 fix 2 — redesign: replaced the dark cocoa card + diagonal white
+ * shimmer slab with a cream-tinted card + unison opacity pulse. Doruk:
+ * "the big ass shimmer on the background of the image is not nice…
+ * should be more neutral instead of black background… the shimmer
+ * isn't really shimmer there's just a diagonal white thing going on
+ * top." Pulse pattern matches Apple Settings + iMessage loading states.
  *
  * Sizing matches `SwipeOfferStack`'s `discover` mode (the only surface
  * that consumes this today — DiscoverView). The drawer-mode variant
@@ -27,18 +31,20 @@
  * compete with the chevron's own enter animation.
  */
 
-import { type ReactElement, useEffect, useMemo } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { type ReactElement, useEffect } from "react";
+import { View } from "react-native";
 import Animated, {
   Easing,
   interpolate,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 
-const SHIMMER_DURATION_MS = 1600;
+const PULSE_DURATION_MS = 1500;
 // Mirror SwipeOfferStack.STACK_MIN_HEIGHT_DISCOVER + the simplified card
 // surface min-height so the skeleton occupies exactly the space the
 // real swipe stack will fill — the cross-fade lands the cards in the
@@ -62,60 +68,77 @@ const DEPTH_TRANSFORMS: Record<Depth, DepthTransform> = {
   2: { scale: 0.86, translateY: 28, translateX: 12, opacity: 0.25 },
 };
 
-// Placeholder + shimmer colors — matched against the cream wallet
-// palette. The placeholder is subtle ink-tinted, the shimmer highlight
-// is white-ish so it reads against the placeholder regardless of which
-// underlying surface we end up on (cream wallet bg vs cream Discover bg).
-const PLACEHOLDER_COLOR = "rgba(23, 18, 15, 0.06)";
-const SHIMMER_HIGHLIGHT_COLOR = "rgba(255, 255, 255, 0.5)";
+// Card surface — cream-tinted near-white. Matches the cream wallet
+// palette so the skeleton reads as "loading content into the same
+// surface" rather than a foreign dark slab. NO border — Doruk's note
+// said remove the dark frame around the placeholder card.
+const CARD_BACKGROUND = "rgba(255, 248, 238, 0.95)";
+// Placeholder rectangle min/max background opacity — same ink color
+// (rgba(23,18,15,X)) animated between 0.06 and 0.12 by the unison pulse.
+// 0.06 = barely-there resting state; 0.12 = ~2x brighter, still well
+// below the cocoa text color so the pulse reads as ambient shimmer
+// without imitating real content.
+const PLACEHOLDER_MIN = 0.06;
+const PLACEHOLDER_MAX = 0.12;
 
 export function SwipeStackSkeleton(): ReactElement {
+  // Single driver SV for the unison pulse — every placeholder rectangle
+  // across all 3 stacked cards interpolates from this. Single SV keeps
+  // the pulse perfectly synchronized so the surface reads as one
+  // breathing skeleton, not a flock of independent flickers.
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    pulse.value = 0;
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(1, {
+          duration: PULSE_DURATION_MS / 2,
+          easing: Easing.inOut(Easing.sin),
+        }),
+        withTiming(0, {
+          duration: PULSE_DURATION_MS / 2,
+          easing: Easing.inOut(Easing.sin),
+        }),
+      ),
+      -1,
+      false,
+    );
+  }, [pulse]);
+
   return (
     <View style={{ width: "100%", minHeight: STACK_MIN_HEIGHT, position: "relative" }}>
       {/* Render deepest peek first so the stack z-orders correctly. */}
-      <SkeletonCard depth={2} />
-      <SkeletonCard depth={1} />
-      <SkeletonCard depth={0} />
+      <SkeletonCard depth={2} pulse={pulse} />
+      <SkeletonCard depth={1} pulse={pulse} />
+      <SkeletonCard depth={0} pulse={pulse} />
     </View>
   );
 }
 
-function SkeletonCard({ depth }: { depth: Depth }): ReactElement {
+function SkeletonCard({
+  depth,
+  pulse,
+}: {
+  depth: Depth;
+  pulse: SharedValue<number>;
+}): ReactElement {
   const layer = DEPTH_TRANSFORMS[depth];
-  const { width: screenWidth } = useWindowDimensions();
 
-  // Loop a translateX from -screenWidth → +screenWidth. The shimmer
-  // band itself is rendered as a wide rotated rectangle with a soft
-  // edge so the sweep reads as a diagonal highlight (the "metallic"
-  // shimmer Apple Music / Spotify use).
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withRepeat(
-      withTiming(1, {
-        duration: SHIMMER_DURATION_MS,
-        easing: Easing.linear,
-      }),
-      -1, // infinite
-      false, // don't reverse — sweep always L→R
-    );
-  }, [progress]);
-
-  const shimmerStyle = useAnimatedStyle(() => {
-    const tx = interpolate(
-      progress.value,
+  // Shared animated style for every placeholder rectangle on this card.
+  // backgroundColor jumps between PLACEHOLDER_MIN and PLACEHOLDER_MAX
+  // ink opacity on the unison pulse. Driving backgroundColor via a
+  // worklet (not opacity on the View) keeps the surrounding card
+  // background visible at 0.95 cream throughout the cycle.
+  const placeholderStyle = useAnimatedStyle(() => {
+    const alpha = interpolate(
+      pulse.value,
       [0, 1],
-      [-screenWidth, screenWidth],
+      [PLACEHOLDER_MIN, PLACEHOLDER_MAX],
     );
     return {
-      transform: [{ translateX: tx }, { rotateZ: "12deg" }],
+      backgroundColor: `rgba(23, 18, 15, ${alpha})`,
     };
   });
-
-  // Stagger each depth's shimmer so the three cards don't pulse in
-  // perfect lockstep — the offset mimics the slight phase shift Spotify
-  // uses across stacked rows. Bigger depth = later start.
-  const staggerDelay = depth * 180;
 
   return (
     <View
@@ -140,40 +163,43 @@ function SkeletonCard({ depth }: { depth: Depth }): ReactElement {
           minHeight: CARD_SURFACE_MIN_HEIGHT,
           borderRadius: CARD_RADIUS,
           overflow: "hidden",
-          backgroundColor: "#17120f",
+          backgroundColor: CARD_BACKGROUND,
           shadowColor: "#17120f",
-          shadowOpacity: 0.18,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
         }}
       >
-        {/* Photo region — top ~60% of the card. Solid placeholder fill
-            so the shimmer band has something visually consistent to
-            sweep across. */}
-        <View
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: "60%",
-            backgroundColor: PLACEHOLDER_COLOR,
-          }}
+        {/* Photo region — top ~60% of the card. Pulses in unison with
+            the rest of the placeholders. */}
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "60%",
+            },
+            placeholderStyle,
+          ]}
         />
 
-        {/* Discount badge placeholder — top-right square mirrors the real
+        {/* Discount badge placeholder — top-right pill mirrors the real
             discount pill's anchor in CardSurface / SimplifiedCardSurface. */}
-        <View
-          style={{
-            position: "absolute",
-            top: 14,
-            right: 14,
-            width: 64,
-            height: 28,
-            borderRadius: 999,
-            backgroundColor: PLACEHOLDER_COLOR,
-            zIndex: 5,
-          }}
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              top: 14,
+              right: 14,
+              width: 64,
+              height: 28,
+              borderRadius: 999,
+              zIndex: 5,
+            },
+            placeholderStyle,
+          ]}
         />
 
         {/* Bottom text rows — title + subtitle bars sit roughly where the
@@ -188,99 +214,30 @@ function SkeletonCard({ depth }: { depth: Depth }): ReactElement {
             zIndex: 6,
           }}
         >
-          <View
-            style={{
-              width: "70%",
-              height: 22,
-              borderRadius: 6,
-              backgroundColor: PLACEHOLDER_COLOR,
-            }}
+          <Animated.View
+            style={[
+              {
+                width: "70%",
+                height: 22,
+                borderRadius: 6,
+              },
+              placeholderStyle,
+            ]}
           />
-          <View
-            style={{
-              marginTop: 10,
-              width: "50%",
-              height: 14,
-              borderRadius: 5,
-              backgroundColor: PLACEHOLDER_COLOR,
-            }}
+          <Animated.View
+            style={[
+              {
+                marginTop: 10,
+                width: "50%",
+                height: 14,
+                borderRadius: 5,
+              },
+              placeholderStyle,
+            ]}
           />
-        </View>
-
-        {/* Animated shimmer band — wide rotated rectangle that sweeps
-            L→R every 1.6s. `pointerEvents="none"` so it never blocks
-            the fade-in of the real cards on resolve. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            overflow: "hidden",
-          }}
-        >
-          <DelayedShimmer style={shimmerStyle} delayMs={staggerDelay} />
         </View>
       </View>
     </View>
   );
 }
 
-/**
- * The shimmer band itself — a wide vertical rectangle, rotated 12°,
- * that translates across the parent. The component delays its first
- * paint by `delayMs` so the three stacked cards sweep with a slight
- * phase shift (less hypnotic than a pure unison pulse).
- */
-function DelayedShimmer({
-  style,
-  delayMs,
-}: {
-  style: ReturnType<typeof useAnimatedStyle>;
-  delayMs: number;
-}): ReactElement {
-  // Defensive: opacity ramps from 0 → 1 over the first `delayMs` so the
-  // initial frame doesn't show a stale shimmer-mid-sweep. Cheap to
-  // implement without coupling another shared value into the loop.
-  const opacity = useSharedValue(0);
-  useEffect(() => {
-    const id = setTimeout(() => {
-      opacity.value = withTiming(1, { duration: 200 });
-    }, delayMs);
-    return () => clearTimeout(id);
-  }, [delayMs, opacity]);
-
-  const fadeInStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  // Combine the sweep transform (style) with the fade-in (fadeInStyle)
-  // by rendering nested Animated.Views — composing two animated styles
-  // on a single View would require a custom worklet, and this nesting
-  // costs no perceptible perf for 3 cards.
-  const innerBand = useMemo(
-    () => (
-      <Animated.View
-        style={[
-          {
-            position: "absolute",
-            top: -200,
-            bottom: -200,
-            width: 120,
-            backgroundColor: SHIMMER_HIGHLIGHT_COLOR,
-          },
-          style,
-        ]}
-      />
-    ),
-    [style],
-  );
-
-  return (
-    <Animated.View
-      style={[{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }, fadeInStyle]}
-    >
-      {innerBand}
-    </Animated.View>
-  );
-}
