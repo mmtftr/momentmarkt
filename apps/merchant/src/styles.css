@@ -32,6 +32,44 @@ button {
   padding: 28px 0;
 }
 
+.shell > section {
+  animation: section-fade-up 520ms cubic-bezier(0.16, 0.84, 0.3, 1) both;
+}
+
+.shell > section:nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.shell > section:nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.shell > section:nth-child(4) {
+  animation-delay: 180ms;
+}
+
+.shell > section:nth-child(5) {
+  animation-delay: 220ms;
+}
+
+@keyframes section-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell > section,
+  .metric-value-pulse {
+    animation: none !important;
+  }
+}
+
 .hero-panel,
 .demand-hero,
 .curve-card,
@@ -357,25 +395,25 @@ h3 {
 }
 
 .metric-value-pulse {
-  animation: metric-pulse 700ms ease-out;
+  animation: metric-pulse 900ms cubic-bezier(0.22, 0.71, 0.32, 1);
   transform-origin: left center;
 }
 
 @keyframes metric-pulse {
   0% {
-    color: #18b46c;
-    transform: scale(1.08);
-    text-shadow: 0 0 18px rgba(24, 180, 108, 0.45);
+    color: #1f5040;
+    transform: translateY(0);
+    opacity: 0.55;
   }
-  60% {
-    color: #18b46c;
-    transform: scale(1.02);
-    text-shadow: 0 0 6px rgba(24, 180, 108, 0.2);
+  35% {
+    color: #1f5040;
+    transform: translateY(-2px);
+    opacity: 1;
   }
   100% {
     color: inherit;
-    transform: scale(1);
-    text-shadow: none;
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 
@@ -671,6 +709,63 @@ code {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #2c7c59, #9ee6b0);
+  transition: width 480ms cubic-bezier(0.22, 0.71, 0.32, 1);
+}
+
+.mobile-moment {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 1fr);
+  gap: 18px;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 18px;
+  border-radius: 22px;
+  background: #f4f7f2;
+}
+
+.mobile-moment-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-moment-copy p {
+  margin-bottom: 0;
+  color: #1f5040;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.mobile-moment-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(28, 28, 30, 0.94);
+  color: #fff8ee;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+}
+
+.mobile-moment-banner-meta {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 248, 238, 0.6);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mobile-moment-banner strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.mobile-moment-banner small {
+  color: rgba(255, 248, 238, 0.78);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 @media (max-width: 860px) {
@@ -685,7 +780,8 @@ code {
   .demand-hero,
   .content-grid,
   .offer-box,
-  .evidence-row {
+  .evidence-row,
+  .mobile-moment {
     grid-template-columns: 1fr;
   }
 
