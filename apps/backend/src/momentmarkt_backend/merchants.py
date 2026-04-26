@@ -1,24 +1,23 @@
 """Static merchant catalog for the wallet drawer search surface.
 
-This module powers ``GET /merchants/{city}`` (issue #115). The Berlin
-catalog is hydrated from real OpenStreetMap (Overpass API) places near
-Mia's demo center (lat 52.5301, lon 13.4012; near Rosenthaler Platz)
-captured 2026-04-26. The 4 canonical density-fixture merchants are
-preserved verbatim so signals, density curves, and surfacing keep
-working. The remaining ~31 entries are real Berlin Mitte POIs (cafes,
-bakeries, bars, bookstores, etc.) so the wallet drawer renders
-recognisable names like "St. Oberholz", "Zeit für Brot", "ocelot",
-"Mein Haus am See" instead of synthetic ones.
+This module powers ``GET /merchants/{city}`` (issue #115). Both the
+Berlin and Zurich catalogs are hydrated from real OpenStreetMap
+(Overpass API) places, captured 2026-04-26. The 4 canonical
+density-fixture merchants for Berlin are preserved verbatim so signals,
+density curves, and surfacing keep working. The remaining ~31 Berlin
+entries are real Berlin Mitte POIs (cafes, bakeries, bars, bookstores,
+etc.) so the wallet drawer renders recognisable names like
+"St. Oberholz", "Zeit für Brot", "ocelot", "Mein Haus am See".
 
-Distances are computed via haversine from Mia's center; all entries
-are within 500m of her. Active offers are carried over from the
-previous synthetic catalog and re-attached to OSM merchants whose
-category matches the original offer's vibe (~12 of ~35 in Berlin,
-~3 of 8 in Zurich). Cafe Bondi's offer is locked to the rain-trigger
-demo copy.
+The Zurich catalog (issue #129) was scraped from Overpass around
+Zurich HB (lat 47.3779, lon 8.5403; r=1500m) — 30 real POIs spread
+across all 9 supported categories with names like "Orell Füssli",
+"Mövenpick Ice Cream", "Bäckerei Conditorei Stocker", "Brezelkönig",
+"Brasserie Federal". Distances are haversine metres from Zurich HB.
 
-Zurich catalog stays fully synthetic for now (out of scope for the
-OSM scrape).
+Active offers are attached to ~9 Berlin and ~9 Zurich merchants so
+the wallet drawer's "Offers for you" pill shows a credible mix.
+Cafe Bondi's offer is locked to the rain-trigger demo copy.
 """
 
 from __future__ import annotations
@@ -430,72 +429,236 @@ _BERLIN_MERCHANTS: list[dict[str, Any]] = [
 
 
 # ---------------------------------------------------------------------------
-# Zurich catalog (~8 merchants, neighborhood "HB") — synthetic, out of scope
-# for the OSM scrape.
+# Zurich catalog (~30 merchants, neighborhood "HB")
 # ---------------------------------------------------------------------------
+#
+# Real OpenStreetMap POIs scraped from the Overpass API around Zurich HB
+# (lat 47.3779, lon 8.5403; r=1500m) on 2026-04-26 (issue #129). 30 named
+# nodes were chosen: ≥2 per available category (cafe, bakery, bookstore,
+# kiosk, restaurant, bar, boutique, ice_cream, florist), then filled with
+# the next-closest overall up to 30 entries. Names preserve OSM ``name``
+# tag verbatim (umlauts + diacritics intact). Distances are haversine
+# metres from Zurich HB.
+#
+# 9 entries carry an ``active_offer`` (one per category, biased to the
+# closest in each) so "Offers for you" shows a credible mix without
+# overwhelming the drawer. shop=clothes folds into the boutique category
+# (same convention as the Berlin recipe).
 
 _ZURICH_MERCHANTS: list[dict[str, Any]] = [
     {
-        "id": "zurich-hb-kafi-viadukt",
-        "display_name": "Kafi Viadukt",
-        "category": "cafe",
-        "distance_m": 115,
+        "id": "zurich-hb-collectif-mon-amour-94360",
+        "display_name": "Collectif mon Amour",
+        "category": "boutique",
+        "distance_m": 8,
         "neighborhood": "HB",
         "active_offer": _offer(
-            "12% cashback on filter coffee",
-            "−12%",
+            "10% off raincoats today only",
+            "−10%",
+            "2026-04-26T20:00:00+02:00",
+        ),
+    },
+    {
+        "id": "zurich-hb-backerei-conditorei-stocker-61535",
+        "display_name": "Bäckerei Conditorei Stocker",
+        "category": "bakery",
+        "distance_m": 22,
+        "neighborhood": "HB",
+        "active_offer": _offer(
+            "Fresh Birchermüesli, −20%",
+            "−20%",
+            "2026-04-26T11:30:00+02:00",
+        ),
+    },
+    {
+        "id": "zurich-hb-le-cafe-61594",
+        "display_name": "Le Café",
+        "category": "cafe",
+        "distance_m": 29,
+        "neighborhood": "HB",
+        "active_offer": _offer(
+            "Morning espresso flight, −15%",
+            "−15%",
             "2026-04-26T18:00:00+02:00",
         ),
     },
     {
-        "id": "zurich-hb-baeckerei-kleiner",
-        "display_name": "Bäckerei Kleiner",
-        "category": "bakery",
-        "distance_m": 240,
-        "neighborhood": "HB",
-        "active_offer": None,
-    },
-    {
-        "id": "zurich-hb-buchhandlung-orell-fuessli",
-        "display_name": "Buchhandlung Orell Füssli",
-        "category": "bookstore",
-        "distance_m": 320,
-        "neighborhood": "HB",
-        "active_offer": None,
-    },
-    {
-        "id": "zurich-hb-kiosk-bahnhof",
-        "display_name": "Kiosk Bahnhof",
-        "category": "kiosk",
-        "distance_m": 60,
+        "id": "zurich-hb-brasserie-federal-00898",
+        "display_name": "Brasserie Federal",
+        "category": "restaurant",
+        "distance_m": 34,
         "neighborhood": "HB",
         "active_offer": _offer(
-            "CHF 2 off Rivella six-pack",
-            "CHF 2 off",
-            "2026-04-26T22:00:00+02:00",
+            "Lunch special CHF 3 off",
+            "CHF 3 off",
+            "2026-04-26T16:00:00+02:00",
         ),
     },
     {
-        "id": "zurich-hb-restaurant-zeughauskeller",
-        "display_name": "Zeughauskeller",
+        "id": "zurich-hb-il-baretto-61526",
+        "display_name": "Il Baretto",
+        "category": "cafe",
+        "distance_m": 37,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-san-gennaro-00893",
+        "display_name": "San Gennaro",
         "category": "restaurant",
-        "distance_m": 780,
+        "distance_m": 39,
         "neighborhood": "HB",
         "active_offer": None,
     },
     {
-        "id": "zurich-hb-bar-old-crow",
-        "display_name": "Old Crow",
-        "category": "bar",
-        "distance_m": 540,
+        "id": "zurich-hb-chicoree-61542",
+        "display_name": "Chicorée",
+        "category": "boutique",
+        "distance_m": 41,
         "neighborhood": "HB",
         "active_offer": None,
     },
     {
-        "id": "zurich-hb-eisdiele-gelati-am-see",
-        "display_name": "Gelati am See",
+        "id": "zurich-hb-amari-94359",
+        "display_name": "Amari",
+        "category": "boutique",
+        "distance_m": 44,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-cafe-oscar-00900",
+        "display_name": "Cafe Oscar",
+        "category": "cafe",
+        "distance_m": 53,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-restaurant-oase-33439",
+        "display_name": "Restaurant Oase",
+        "category": "restaurant",
+        "distance_m": 54,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-miro-06421",
+        "display_name": "Miró",
+        "category": "cafe",
+        "distance_m": 57,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-sud-00904",
+        "display_name": "Süd",
+        "category": "restaurant",
+        "distance_m": 65,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-time-lounge-61595",
+        "display_name": "Time... Lounge",
+        "category": "restaurant",
+        "distance_m": 70,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-sora-sushi-00919",
+        "display_name": "Sora Sushi",
+        "category": "restaurant",
+        "distance_m": 72,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-bayard-co-ltd-61562",
+        "display_name": "Bayard Co Ltd",
+        "category": "boutique",
+        "distance_m": 73,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-the-counter-00897",
+        "display_name": "The Counter",
+        "category": "restaurant",
+        "distance_m": 82,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-calida-94364",
+        "display_name": "Calida",
+        "category": "boutique",
+        "distance_m": 82,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-starbucks-61544",
+        "display_name": "Starbucks",
+        "category": "cafe",
+        "distance_m": 84,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-da-capo-bar-00903",
+        "display_name": "Da Capo Bar",
+        "category": "cafe",
+        "distance_m": 85,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-brezelkonig-61545",
+        "display_name": "Brezelkönig",
+        "category": "bakery",
+        "distance_m": 87,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-orell-fussli-54364",
+        "display_name": "Orell Füssli",
+        "category": "bookstore",
+        "distance_m": 95,
+        "neighborhood": "HB",
+        "active_offer": _offer(
+            "15% off art books this weekend",
+            "−15%",
+            "2026-04-26T20:00:00+02:00",
+        ),
+    },
+    {
+        "id": "zurich-hb-blume-3000-54348",
+        "display_name": "Blume 3000",
+        "category": "florist",
+        "distance_m": 110,
+        "neighborhood": "HB",
+        "active_offer": _offer(
+            "Tulip bunch CHF 7 (was CHF 10)",
+            "CHF 3 off",
+            "2026-04-26T18:00:00+02:00",
+        ),
+    },
+    {
+        "id": "zurich-hb-barth-bucher-61553",
+        "display_name": "Barth Bücher",
+        "category": "bookstore",
+        "distance_m": 126,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-movenpick-ice-cream-79505",
+        "display_name": "Mövenpick Ice Cream",
         "category": "ice_cream",
-        "distance_m": 1190,
+        "distance_m": 132,
         "neighborhood": "HB",
         "active_offer": _offer(
             "Two scoops for CHF 5",
@@ -504,10 +667,58 @@ _ZURICH_MERCHANTS: list[dict[str, Any]] = [
         ),
     },
     {
-        "id": "zurich-hb-blumenladen-bahnhof",
-        "display_name": "Blumenladen Bahnhof",
+        "id": "zurich-hb-blumen-kramer-61554",
+        "display_name": "Blumen Krämer",
         "category": "florist",
-        "distance_m": 90,
+        "distance_m": 133,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-kiosk-zhb-39139",
+        "display_name": "Kiosk ZHB",
+        "category": "kiosk",
+        "distance_m": 151,
+        "neighborhood": "HB",
+        "active_offer": _offer(
+            "CHF 2 off Rivella six-pack",
+            "CHF 2 off",
+            "2026-04-26T22:00:00+02:00",
+        ),
+    },
+    {
+        "id": "zurich-hb-konrad-kaffee-cocktailbar-ex-0815-79187",
+        "display_name": "Konrad Kaffee- & Cocktailbar (ex 0815)",
+        "category": "bar",
+        "distance_m": 161,
+        "neighborhood": "HB",
+        "active_offer": _offer(
+            "Apéro hour: house wine CHF 6",
+            "−25%",
+            "2026-04-26T20:00:00+02:00",
+        ),
+    },
+    {
+        "id": "zurich-hb-d-vino-18631",
+        "display_name": "D-Vino",
+        "category": "bar",
+        "distance_m": 169,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-leonardo-62389",
+        "display_name": "Leonardo",
+        "category": "ice_cream",
+        "distance_m": 273,
+        "neighborhood": "HB",
+        "active_offer": None,
+    },
+    {
+        "id": "zurich-hb-k-snack-central-22313",
+        "display_name": "k snack Central",
+        "category": "kiosk",
+        "distance_m": 329,
         "neighborhood": "HB",
         "active_offer": None,
     },

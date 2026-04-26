@@ -55,15 +55,53 @@ def test_berlin_query_bondi_returns_cafe_bondi() -> None:
     assert payload["merchants"][0]["id"] == "berlin-mitte-cafe-bondi"
 
 
-def test_zurich_catalog_is_non_empty() -> None:
+def test_zurich_catalog_is_real_osm_and_non_empty() -> None:
     response = client.get("/merchants/zurich")
     assert response.status_code == 200
     payload = response.json()
     assert payload["city"] == "zurich"
-    assert payload["count"] >= 1
-    # Smoke: the canonical Zurich demo merchant should be in the catalog.
-    ids = {m["id"] for m in payload["merchants"]}
-    assert "zurich-hb-kafi-viadukt" in ids
+    # OSM-hydrated catalog should comfortably exceed 20 entries.
+    assert payload["count"] >= 20
+    assert payload["count"] == len(payload["merchants"])
+    # All ids must use the zurich-hb- prefix that the OSM scrape emits.
+    for merchant in payload["merchants"]:
+        assert merchant["id"].startswith("zurich-hb-")
+        assert merchant["neighborhood"] == "HB"
+    # Smoke: at least one recognisable Zurich HB landmark must be present.
+    names = {m["display_name"] for m in payload["merchants"]}
+    assert "Orell Füssli" in names
+
+
+def test_zurich_query_cafe_returns_multiple_results() -> None:
+    response = client.get("/merchants/zurich", params={"q": "cafe"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "cafe"
+    # OSM scrape gives us several cafes around HB.
+    assert payload["count"] >= 2
+    for merchant in payload["merchants"]:
+        haystack = (
+            merchant["display_name"].lower()
+            + "|"
+            + merchant["category"].lower()
+            + "|"
+            + merchant["neighborhood"].lower()
+        )
+        assert "cafe" in haystack
+
+
+def test_zurich_has_at_least_one_active_offer() -> None:
+    response = client.get("/merchants/zurich")
+    assert response.status_code == 200
+    payload = response.json()
+    with_offers = [m for m in payload["merchants"] if m.get("active_offer")]
+    assert len(with_offers) >= 1
+    # Each attached offer must look like the canonical offer shape.
+    for merchant in with_offers:
+        offer = merchant["active_offer"]
+        assert isinstance(offer["headline"], str) and offer["headline"]
+        assert isinstance(offer["discount"], str) and offer["discount"]
+        assert isinstance(offer["expires_at_iso"], str) and offer["expires_at_iso"]
 
 
 def test_unknown_city_returns_404() -> None:
