@@ -101,6 +101,10 @@ type Props = {
 // Inline brand color (styles.ts does not export the palette).
 // Mirrors `colors.spark` so the highlighted pin reads as MomentMarkt-red.
 const SPARK_RED = "#f2542d";
+const MAP_PITCH = 58;
+const MAP_HEADING = 18;
+const MAP_ALTITUDE = 850;
+const FOCUSED_MAP_ALTITUDE = 520;
 
 // Category → SF Symbol mapping lives in `lib/categoryIcon.ts` so the
 // CityMap markers, the wallet drawer's MerchantSearchList avatars, and
@@ -162,6 +166,13 @@ export function CityMap({
     latitudeDelta: 0.01,
     longitudeDelta: 0.015,
   };
+  const camera = {
+    center: { latitude: centerLat, longitude: centerLng },
+    pitch: MAP_PITCH,
+    heading: MAP_HEADING,
+    altitude: MAP_ALTITUDE,
+    zoom: 16,
+  };
 
   // Imperative re-center on city swap. `initialRegion` is set once at
   // mount; without this useEffect the map stays on the original city's
@@ -170,9 +181,9 @@ export function CityMap({
   // demo cut doesn't drag.
   const mapRef = useRef<MapView | null>(null);
   useEffect(() => {
-    mapRef.current?.animateToRegion(region, 600);
+    mapRef.current?.animateCamera(camera, { duration: 600 });
     // Disable exhaustive-deps — animating on lat/lng change only; the
-    // delta values are constant and shouldn't re-trigger.
+    // camera constants shouldn't re-trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerLat, centerLng]);
 
@@ -180,14 +191,15 @@ export function CityMap({
     if (!focusedPinId) return;
     const focused = resolvedPins.find((pin) => pin.id === focusedPinId);
     if (!focused) return;
-    mapRef.current?.animateToRegion(
+    mapRef.current?.animateCamera(
       {
-        latitude: focused.lat,
-        longitude: focused.lng,
-        latitudeDelta: 0.004,
-        longitudeDelta: 0.006,
+        center: { latitude: focused.lat, longitude: focused.lng },
+        pitch: MAP_PITCH,
+        heading: MAP_HEADING,
+        altitude: FOCUSED_MAP_ALTITUDE,
+        zoom: 18,
       },
-      450,
+      { duration: 450 },
     );
   }, [focusedPinId, resolvedPins]);
 
@@ -208,11 +220,12 @@ export function CityMap({
         ref={mapRef}
         provider={PROVIDER_DEFAULT}
         style={{ width: "100%", height: "100%" }}
+        camera={camera}
         initialRegion={region}
         scrollEnabled={interactive}
         zoomEnabled={interactive}
         rotateEnabled={interactive}
-        pitchEnabled={interactive}
+        pitchEnabled
         showsCompass={showCompass}
         showsUserLocation={false}
         showsMyLocationButton={false}
