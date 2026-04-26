@@ -133,6 +133,8 @@ export type MerchantListItem = {
    * fixtures are free to omit it without breaking compilation.
    */
   emoji?: string;
+  lat?: number;
+  lon?: number;
   distance_m: number;
   neighborhood: string;
   active_offer: ActiveOffer | null;
@@ -190,6 +192,8 @@ export async function fetchMerchants(
         display_name: m.display_name,
         category: m.category,
         emoji: typeof m.emoji === "string" ? m.emoji : undefined,
+        lat: typeof m.lat === "number" ? m.lat : undefined,
+        lon: typeof m.lon === "number" ? m.lon : undefined,
         distance_m: m.distance_m,
         neighborhood: m.neighborhood,
         active_offer:

@@ -139,6 +139,8 @@ class MerchantListItem(BaseModel):
     display_name: str
     category: str
     emoji: str
+    lat: float
+    lon: float
     distance_m: int
     neighborhood: str
     active_offer: ActiveOffer | None = None
@@ -381,6 +383,8 @@ def list_merchants(
             display_name=m["display_name"],
             category=m["category"],
             emoji=emoji_for(m["category"]),
+            lat=m["lat"],
+            lon=m["lon"],
             distance_m=m["distance_m"],
             neighborhood=m["neighborhood"],
             active_offer=m.get("active_offer"),

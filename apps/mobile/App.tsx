@@ -31,7 +31,7 @@ import { SymbolView } from "expo-symbols";
 import type { SFSymbol } from "sf-symbols-typescript";
 
 import { BottomNavBar, type ViewMode } from "./src/components/BottomNavBar";
-import { CityMap } from "./src/components/CityMap";
+import { CityMap, type CityMapPin } from "./src/components/CityMap";
 import { DevPanel, type DevPanelSignal } from "./src/components/DevPanel";
 import { DiscoverView } from "./src/components/DiscoverView";
 import { DEFAULT_LENS, type LensKey } from "./src/components/LensChips";
@@ -43,6 +43,7 @@ import { WalletView } from "./src/components/WalletView";
 import { WidgetRenderer } from "./src/components/WidgetRenderer";
 import {
   type AlternativeOffer,
+  fetchMerchants,
   type MerchantListItem,
   type PriorSwipe,
 } from "./src/lib/api";
@@ -247,6 +248,43 @@ export default function App() {
   // `/signals/{city}` endpoint, with a deterministic per-city fallback so
   // the demo recording survives an unreachable Hugging Face Space.
   const citySignals = useSignals(city);
+  const [mapMerchants, setMapMerchants] = useState<MerchantListItem[]>([]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchMerchants(city, undefined, 80, ctrl.signal).then((res) => {
+      if (!ctrl.signal.aborted) setMapMerchants(res?.merchants ?? []);
+    });
+    return () => ctrl.abort();
+  }, [city]);
+
+  const mapPins = useMemo<CityMapPin[]>(() => {
+    const heroPins = cityProfile.mapPins.filter((pin) => pin.highlighted);
+    if (mapMerchants.length === 0) return cityProfile.mapPins;
+
+    const heroNames = new Set(heroPins.map((pin) => pin.name.toLowerCase()));
+    const catalogPins = mapMerchants
+      .filter((merchant) => typeof merchant.lat === "number" && typeof merchant.lon === "number")
+      .filter((merchant) => !heroNames.has(merchant.display_name.toLowerCase()))
+      .map<CityMapPin>((merchant) => ({
+        id: merchant.id,
+        name: merchant.display_name,
+        lat: merchant.lat as number,
+        lng: merchant.lon as number,
+        category: merchant.category as CityMapPin["category"],
+        offer: merchant.active_offer
+          ? {
+              headline: merchant.active_offer.headline,
+              body: `${merchant.distance_m} m · ${merchant.neighborhood}`,
+              cashbackLabel: merchant.active_offer.discount,
+              ctaHint: "Tap → Wallet",
+            }
+          : undefined,
+      }));
+
+    return [...heroPins, ...catalogPins];
+  }, [cityProfile, mapMerchants]);
+
   const surfacing = useMemo(
     () => scoreSurfacing({ ...cityProfile.surfacingInput, highIntent }),
     [cityProfile, highIntent],
@@ -646,7 +684,7 @@ export default function App() {
         <CityMap
           centerLat={cityProfile.mapCenter.lat}
           centerLng={cityProfile.mapCenter.lng}
-          pins={cityProfile.mapPins}
+          pins={mapPins}
           interactive={mapInteractive}
           style={StyleSheet.absoluteFill}
           onOfferPress={() => setStep("offer")}

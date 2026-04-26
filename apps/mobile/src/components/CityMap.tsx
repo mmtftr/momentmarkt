@@ -24,8 +24,13 @@ export type MerchantCategory =
   | "cafe"
   | "bakery"
   | "bookstore"
-  | "fitness"
   | "kiosk"
+  | "restaurant"
+  | "bar"
+  | "boutique"
+  | "ice_cream"
+  | "florist"
+  | "fitness"
   | "supermarket"
   | "default";
 

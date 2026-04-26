@@ -23,6 +23,7 @@ Cafe Bondi's offer is locked to the rain-trigger demo copy.
 from __future__ import annotations
 
 from datetime import datetime
+from math import asin, atan2, cos, degrees, radians, sin
 from typing import Any
 
 # Allowed categories. Keep in sync with the API contract documented in
@@ -41,6 +42,11 @@ CATEGORIES = (
 
 CATALOG_NOW_ISO = "2026-04-26T12:00:00+02:00"
 CATALOG_WALLET_EXPIRES_DATE = "2026-04-29"
+
+CITY_CENTERS: dict[str, tuple[float, float]] = {
+    "berlin": (52.5301, 13.4012),
+    "zurich": (47.3779, 8.5403),
+}
 
 # Single-glyph avatars by category. The mobile card uses these as a fallback
 # when no merchant photo is available (which is always, for this demo).
@@ -99,10 +105,46 @@ def current_active_offer(
     return offer if active_offer_is_current(offer, now_iso=now_iso) else None
 
 
-def _with_current_active_offer(merchant: dict[str, Any]) -> dict[str, Any]:
+def _project_lat_lon(center_lat: float, center_lon: float, distance_m: int, bearing_deg: float) -> tuple[float, float]:
+    earth_radius_m = 6_371_000
+    angular_distance = distance_m / earth_radius_m
+    bearing = radians(bearing_deg)
+    lat1 = radians(center_lat)
+    lon1 = radians(center_lon)
+
+    lat2 = asin(
+        sin(lat1) * cos(angular_distance)
+        + cos(lat1) * sin(angular_distance) * cos(bearing)
+    )
+    lon2 = lon1 + atan2(
+        sin(bearing) * sin(angular_distance) * cos(lat1),
+        cos(angular_distance) - sin(lat1) * sin(lat2),
+    )
+    return (round(degrees(lat2), 6), round(degrees(lon2), 6))
+
+
+def _stable_bearing(merchant_id: str, index: int) -> float:
+    seed = sum((pos + 1) * ord(char) for pos, char in enumerate(merchant_id))
+    return float((seed + index * 37) % 360)
+
+
+def _with_current_active_offer(
+    merchant: dict[str, Any],
+    city: str | None = None,
+    index: int = 0,
+) -> dict[str, Any]:
     item = dict(merchant)
     offer = current_active_offer(merchant)
     item["active_offer"] = dict(offer) if offer else None
+    if "lat" not in item or "lon" not in item:
+        center = CITY_CENTERS.get((city or "").lower())
+        if center is not None:
+            item["lat"], item["lon"] = _project_lat_lon(
+                center[0],
+                center[1],
+                int(item.get("distance_m", 0)),
+                _stable_bearing(str(item.get("id", "")), index),
+            )
     return item
 
 
@@ -798,9 +840,13 @@ def search_merchants(
     - Returns ``None`` if the city is unknown so callers can 404.
     """
 
-    merchants = get_merchants(city)
-    if merchants is None:
+    raw_merchants = get_merchants(city)
+    if raw_merchants is None:
         return None
+    merchants = [
+        _with_current_active_offer(m, city=city, index=i)
+        for i, m in enumerate(raw_merchants)
+    ]
     if not query:
         filtered = list(merchants)
     else:
@@ -817,7 +863,7 @@ def search_merchants(
             ]
     if limit > 0:
         filtered = filtered[:limit]
-    return [_with_current_active_offer(m) for m in filtered]
+    return filtered
 
 
 def emoji_for(category: str) -> str:

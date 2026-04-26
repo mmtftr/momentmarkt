@@ -46,13 +46,13 @@ export const cityProfiles: Record<DemoCityId, DemoCityProfile> = {
       demandGapRatio: 0.54,
       distanceM: 82,
     },
-    mapCenter: { lat: 52.5219, lng: 13.4132 },
+    mapCenter: { lat: 52.5301, lng: 13.4012 },
     mapPins: [
       {
         id: "cafe-bondi",
         name: "Cafe Bondi",
-        lat: 52.521,
-        lng: 13.413,
+        lat: 52.5308,
+        lng: 13.4012,
         highlighted: true,
         category: "cafe",
         // Callout payload for the Apple Maps in-pin offer (issue #43).
@@ -65,9 +65,9 @@ export const cityProfiles: Record<DemoCityId, DemoCityProfile> = {
           ctaHint: "Tap → Wallet",
         },
       },
-      { id: "backerei-mitte", name: "Backerei Mitte", lat: 52.5225, lng: 13.4108, category: "bakery" },
-      { id: "buchladen-rosa", name: "Buchladen Rosa", lat: 52.5198, lng: 13.4155, category: "bookstore" },
-      { id: "kiosk-ecke", name: "Kiosk Ecke", lat: 52.5232, lng: 13.4147, category: "kiosk" },
+      { id: "backerei-mitte", name: "Backerei Mitte", lat: 52.5307, lng: 13.3994, category: "bakery" },
+      { id: "buchladen-rosa", name: "Buchladen Rosa", lat: 52.5282, lng: 13.4012, category: "bookstore" },
+      { id: "kiosk-ecke", name: "Kiosk Ecke", lat: 52.5304, lng: 13.4038, category: "kiosk" },
     ],
   },
   zurich: {
