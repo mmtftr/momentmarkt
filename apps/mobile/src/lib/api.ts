@@ -588,9 +588,27 @@ export type AlternativeOffer = {
 };
 
 export type AlternativesResponse = {
-  merchant_id: string;
+  /** Echoed back when the request was anchored. Null for non-anchored
+   *  lens calls (best_deals / right_now / nearby with no merchant_id). */
+  merchant_id: string | null;
+  /** The lens the backend actually served. Mirrors the request's lens
+   *  param so the mobile can cross-check what it asked for vs. what it
+   *  got. Issue #137. */
+  lens?: LensKey;
   variants: AlternativeOffer[];
 };
+
+/**
+ * Curation lens (issue #137). Mirrors the backend Literal — keep the
+ * union in sync with `apps/backend/.../alternatives.py::LensKey`.
+ *
+ * Per `context/DESIGN_PRINCIPLES.md`:
+ *   for_you    → LLM personalisation
+ *   best_deals → deterministic discount-magnitude sort
+ *   right_now  → rule-based weather × category
+ *   nearby     → pure distance — strict deterministic fallback (#4)
+ */
+export type LensKey = "for_you" | "best_deals" | "right_now" | "nearby";
 
 /**
  * One prior-round swipe the mobile feeds back to the backend so the LLM
@@ -606,28 +624,58 @@ export type PriorSwipe = {
 };
 
 /**
- * Fetch the cross-merchant swipe stack for a merchant. Default body
- * matches the backend defaults (3 variants, no LLM). When
- * `preferenceContext` is supplied the backend routes the candidate list
- * through `preference_agent.py` for re-ranking by inferred preference;
- * the anchor merchant stays pinned at position 0 either way. Returns
- * `null` on any failure so SwipeOfferStack callers can collapse the
- * extra hop and route straight to the focused offer view.
+ * Caller-friendly options for `fetchOfferAlternatives` (issue #137).
+ *
+ * The signature shifted from positional args (merchantId,
+ * preferenceContext) to an options object so the new `lens` + `city`
+ * params don't need a positional cascade — and so future lenses /
+ * filters can land without a TS-side migration.
+ *
+ * - `merchantId` is now optional: lens-only calls (Best deals / Right
+ *   now / Nearby without a merchant tap) request a city-wide pool
+ *   instead of an anchored stack.
+ * - `lens` selects the curation strategy. Defaults to "for_you" so
+ *   the legacy merchant-tap path keeps its existing semantics
+ *   without callers having to opt in.
+ * - `city` is required by the backend when `merchantId` is omitted.
+ *   With `merchantId` set, backend derives city from the catalog.
+ * - `preferenceContext` only affects the "for_you" lens (deterministic
+ *   lenses ignore it server-side per DESIGN_PRINCIPLES.md #4 + #6) —
+ *   safe to pass on every call regardless.
+ */
+export type FetchOfferAlternativesOptions = {
+  merchantId?: string;
+  lens?: LensKey;
+  city?: string;
+  preferenceContext?: PriorSwipe[];
+  signal?: AbortSignal;
+};
+
+/**
+ * Fetch the cross-merchant swipe stack for the active lens. Default
+ * body matches the backend defaults (3 variants, no LLM). When
+ * `preferenceContext` is supplied the backend routes the candidate
+ * list through `preference_agent.py` for re-ranking by inferred
+ * preference (only on the "for_you" lens — the deterministic lenses
+ * ignore it on purpose). The anchor merchant, when present, stays
+ * pinned at position 0. Returns `null` on any failure so callers can
+ * collapse the extra hop and route straight to the focused offer view.
  */
 export async function fetchOfferAlternatives(
-  merchantId: string,
-  preferenceContext?: PriorSwipe[],
-  signal?: AbortSignal,
+  options: FetchOfferAlternativesOptions = {},
 ): Promise<AlternativesResponse | null> {
+  const { merchantId, lens, city, preferenceContext, signal } = options;
   try {
     const body: Record<string, unknown> = {
-      merchant_id: merchantId,
       n: 3,
       // use_llm flips both the headline rewrite + the LLM-driven
       // preference re-rank. Keep false on the wire by default for demo
       // safety — the deterministic heuristic still re-ranks.
       use_llm: false,
     };
+    if (merchantId) body.merchant_id = merchantId;
+    if (lens) body.lens = lens;
+    if (city) body.city = city;
     if (preferenceContext && preferenceContext.length > 0) {
       body.preference_context = preferenceContext.map((p) => ({
         merchant_id: p.merchant_id,
@@ -643,10 +691,9 @@ export async function fetchOfferAlternatives(
     });
     if (!r.ok) return null;
     const data = (await r.json()) as Partial<AlternativesResponse> & Record<string, unknown>;
-    if (
-      typeof data.merchant_id !== "string" ||
-      !Array.isArray(data.variants)
-    ) {
+    // merchant_id is now nullable on the wire (issue #137). Only the
+    // shape of `variants` is load-bearing for parsing.
+    if (!Array.isArray(data.variants)) {
       return null;
     }
     const variants: AlternativeOffer[] = data.variants
@@ -676,7 +723,11 @@ export async function fetchOfferAlternatives(
         widget_spec: v.widget_spec,
       }));
     if (variants.length === 0) return null;
-    return { merchant_id: data.merchant_id, variants };
+    return {
+      merchant_id: typeof data.merchant_id === "string" ? data.merchant_id : null,
+      lens: typeof data.lens === "string" ? (data.lens as LensKey) : undefined,
+      variants,
+    };
   } catch {
     return null;
   }

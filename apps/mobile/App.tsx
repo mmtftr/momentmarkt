@@ -266,10 +266,15 @@ export default function App() {
       // Send the accumulated swipe history so the backend preference agent
       // re-ranks the next round by inferred preference. Empty history on
       // first tap of the session → backend uses deterministic distance sort.
-      const res = await fetchOfferAlternatives(
-        merchant.id,
-        swipeHistory.length > 0 ? swipeHistory : undefined,
-      );
+      // Issue #137: signature shifted to an options object so the call
+      // site reads the same as the lens-driven calls inside the wallet
+      // drawer's primary swipe surface.
+      const res = await fetchOfferAlternatives({
+        merchantId: merchant.id,
+        lens: "for_you",
+        preferenceContext:
+          swipeHistory.length > 0 ? swipeHistory : undefined,
+      });
       if (!res || res.variants.length === 0) {
         // Demo-safety fallback: skip the swipe stack and route straight to
         // the focused offer view. Matches the pre-#132 behaviour exactly.

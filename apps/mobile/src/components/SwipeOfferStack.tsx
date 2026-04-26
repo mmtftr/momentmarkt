@@ -1,4 +1,13 @@
 /**
+ * TODO(#137): "Why am I seeing this?" affordance — long-press on a
+ * swipe card should reveal the matched signals + the lens that picked
+ * it (DESIGN_PRINCIPLES.md #5: reasoning is inspectable). For the
+ * lens-as-primary-surface ship we accept that the chip in the row IS
+ * a lightweight version of this (the user can see which strategy is
+ * curating). Full long-press transparency view is a follow-up.
+ */
+
+/**
  * SwipeOfferStack — 3-card swipeable variant stack (issue #132).
  *
  * Renders a stack of `AlternativeOffer` cards (cheapest → most generous,
